@@ -33,7 +33,9 @@ except ImportError:
 import analysis
 import data as rawdata
 import indicators
+import model
 import scanner
+import track
 import strategy
 import universe
 
@@ -251,11 +253,11 @@ def build_details(src: Source, lst: pd.DataFrame, detail: list, flowset: set, sc
 
     def get_hist(code):
         if code in scan_prices:
-            return scan_prices[code].iloc[-260:]
+            return scan_prices[code].iloc[-330:]
         if src.demo:
-            return rawdata.demo_series(code, 756).iloc[-260:]
+            return rawdata.demo_series(code, 756).iloc[-330:]
         import FinanceDataReader as fdr
-        start = (pd.Timestamp(src.day) - pd.Timedelta(days=400)).strftime("%Y-%m-%d")
+        start = (pd.Timestamp(src.day) - pd.Timedelta(days=500)).strftime("%Y-%m-%d")
         return rawdata._normalize(fdr.DataReader(code, start))
 
     hists = pmap(get_hist, detail, 8, "시세")
@@ -272,7 +274,7 @@ def build_details(src: Source, lst: pd.DataFrame, detail: list, flowset: set, sc
     flows = pmap(get_flow, [c for c in detail if c in flowset and c in hists], 4, "수급")
     names = dict(zip(lst.Code, lst.Name))
     for code, h in hists.items():
-        h = h[h.Close > 0].iloc[-260:]
+        h = h[h.Close > 0].iloc[-330:]
         if len(h) < 30:
             continue
         d = indicators.add_indicators(h)
@@ -332,6 +334,53 @@ def write_index():
         '</head><body>' + body + '</body></html>', encoding="utf-8")
 
 
+def build_model(mr, res, lst, src, prices: dict, demo: bool):
+    """확률 추천(rec.json)과 누적 성적(track.json)."""
+    log("확률 추천·누적 성적")
+    if mr is None:
+        dump("rec.json", {"ok": False})
+        dump("track.json", {"total": 0})
+        return
+    names = dict(zip(lst.Code, lst.Name))
+    dump("rec.json", {
+        "ok": True, "horizon": mr.horizon, "kt": mr.kt, "ks": mr.ks, "auc": r2(mr.auc),
+        "base": r1(mr.base_win * 100), "top": r1(mr.top_win * 100), "topAvg": r2(mr.top_avg * 100),
+        "topHit": r1(mr.top_hit * 100), "topN": mr.top_n, "nTrain": mr.n_train, "nTest": mr.n_test,
+        "test": [mr.test_period[0].strftime("%Y-%m-%d"), mr.test_period[1].strftime("%Y-%m-%d")],
+        "nStocks": len(prices), "usedFlows": bool(getattr(res, "used_flows", False)),
+        "calib": [[r1(a * 100), r1(b * 100), n] for a, b, n in mr.calib],
+        "monthly": [[m, r1(w * 100), r2(a * 100), n] for m, w, a, n in mr.monthly],
+        "picks": [{"code": p["code"], "name": names.get(p["code"], p["name"]), "close": r2(p["close"]),
+                   "chg": r2(p["chg"]), "pct": r2(p["pct"]), "prob": r1(p["prob"] * 100),
+                   "exp": r2(p["exp"] * 100), "hitp": r1(p["hitp"] * 100),
+                   "target": round(p["target"]), "stop": round(p["stop"]), "atr": r2(p["atrp"] * 100),
+                   "why": [[a, b] for a, b in p["why"]]} for p in mr.picks]})
+
+    day = pd.Timestamp(src.day).strftime("%Y-%m-%d")
+    path = (OUT / "_track_demo.csv") if demo else (ROOT / "track" / "picks.csv")
+    tr = track.load(path)
+    if demo and tr.empty and mr.recent:                     # 미리보기: 검증 구간 추천으로 예시 성적 생성
+        tr = pd.concat([tr, pd.DataFrame(mr.recent).assign(status="open")], ignore_index=True)
+    need = set(tr[tr.status == "open"].code) - set(prices)
+    extra = {}
+    if need and not demo:
+        import FinanceDataReader as fdr
+        start = (pd.Timestamp(day) - pd.Timedelta(days=60)).strftime("%Y-%m-%d")
+        for c in need:
+            try:
+                extra[c] = rawdata._normalize(fdr.DataReader(c, start))
+            except Exception:
+                pass
+    tr = track.update(tr, {**prices, **extra}, horizon=mr.horizon)
+    tr = track.add_today(tr, day, [{**p, "code": p["code"]} for p in mr.picks], n=10)
+    if not demo:
+        path.parent.mkdir(exist_ok=True)
+        tr.to_csv(path, index=False)
+    else:
+        path.unlink(missing_ok=True)
+    dump("track.json", track.summary(tr))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--demo", action="store_true")
@@ -349,7 +398,7 @@ def main():
     kd = build_market(src, lst)
     build_ranks(src, lst, kd)
 
-    res, scan_prices, scan_flows = None, {}, {}
+    res, mr, scan_prices, scan_flows = None, None, {}, {}
     if not args.no_ai:
         log("AI 스캔")
         sc = CFG.get("scan", {})
@@ -365,13 +414,19 @@ def main():
             pn = strategy.build_panel(scan_prices, u, kospi["Close"], scan_flows)
             res = strategy.mine(pn, sc)
             res.used_flows = bool(scan_flows)
+            log("상승 확률 모델")
+            mr = model.run(pn, sc, top_n=SITE.get("rec_count", 20), log=log)
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             log("AI 스캔 실패", e)
     build_ai(res, lst)
+    build_model(mr, res, lst, src, scan_prices, args.demo)
 
     detail = lst[lst.Marcap >= SITE["chart_min_marcap"]].sort_values("Marcap", ascending=False).Code.tolist()
     if args.max_detail:
-        keep = set(detail[:args.max_detail]) | {p.code for p in (res.picks if res else [])} | set(DEMO_REAL)
+        keep = (set(detail[:args.max_detail]) | {p.code for p in (res.picks if res else [])} | set(DEMO_REAL)
+                | {p["code"] for p in (mr.picks if mr else [])})
         detail = [c for c in detail if c in keep]
     flowset = set(lst[lst.Marcap >= SITE["flow_min_marcap"]].Code)
     build_details(src, lst, detail, flowset, scan_prices, scan_flows)

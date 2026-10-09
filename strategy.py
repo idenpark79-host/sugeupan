@@ -110,10 +110,42 @@ class Panel:
     cond: np.ndarray              # (N, K) bool
     keys: list
     warm: np.ndarray              # 지표 계산이 충분한 행
+    feat: np.ndarray = None       # (N, F) 연속형 특징 — 확률 모델 입력
+    feat_names: list = None
+
+
+def _features(d: pd.DataFrame, mkt_ret20: pd.Series) -> dict:
+    """확률 모델용 연속형 특징 (모두 당일 종가까지의 정보만 사용)."""
+    c, v = d.Close, d.Volume
+    amt20 = (c * v).rolling(20).mean().replace(0, np.nan)
+    band = (d.BB_upper - d.BB_lower).replace(0, np.nan)
+    f = {
+        "rsi": d.RSI, "sto_k": d.STO_K, "adx": d.ADX, "dmi": d.PDI - d.MDI,
+        "macd_h": d.MACD_hist / c * 100, "macd_h_chg": d.MACD_hist.diff() / c * 100,
+        "bb_pos": (c - d.BB_lower) / band, "bb_w": d.BB_width, "atrp": d.ATR_pct * 100,
+        "vol_r": v / d.VOL_MA20.replace(0, np.nan), "vol_r5": v.rolling(5).mean() / d.VOL_MA20.replace(0, np.nan),
+        "d_ma5": c / d.MA5 - 1, "d_ma20": c / d.MA20 - 1, "d_ma60": c / d.MA60 - 1, "d_ma120": c / d.MA120 - 1,
+        "ma60_slope": d.MA60_slope, "ma20_slope": d.MA20 / d.MA20.shift(5) - 1,
+        "ret1": c.pct_change(), "ret5": c.pct_change(5), "ret20": c.pct_change(20),
+        "ret60": d.RET60, "ret120": d.RET120, "hi52": c / d.HH252 - 1,
+        "lo52": c / c.rolling(252, min_periods=120).min() - 1,
+        "obv_z": (d.OBV - d.OBV.rolling(20).mean()) / d.VOL_MA20.replace(0, np.nan),
+        "gap": d.Open / c.shift() - 1, "body": (c - d.Open) / d.Open,
+        "upper_tail": (d.High - np.maximum(c, d.Open)) / c,
+        "mkt_ret20": mkt_ret20.reindex(d.index, method="ffill"),
+    }
+    if "F_frg" in d:
+        for k, col in (("frg", "F_frg"), ("inst", "F_inst"), ("pen", "F_pen")):
+            x = d[col].fillna(0)
+            f[f"{k}1"] = x / amt20
+            f[f"{k}5"] = x.rolling(5).sum() / amt20
+            f[f"{k}20"] = x.rolling(20).sum() / amt20
+    return f
 
 
 def build_panel(prices: dict, meta: pd.DataFrame, market_close: pd.Series, flows: dict | None = None) -> Panel:
     mkt_up = (market_close > market_close.rolling(60).mean())
+    mkt_ret20 = market_close.pct_change(20)
     keys = [k for k, *_ in CONDITIONS]
     parts, frames = [], {}
     code_to_sid = {c: i for i, c in enumerate(meta["Code"])}
@@ -134,12 +166,20 @@ def build_panel(prices: dict, meta: pd.DataFrame, market_close: pd.Series, flows
         for k in keys:
             if k != "rs":
                 part[k] = cd[k].values
+        for k, v in _features(d, mkt_ret20).items():
+            part["f_" + k] = np.asarray(v, dtype=float)
         parts.append(part)
     P = pd.concat(parts, ignore_index=True).sort_values(["sid", "date"], kind="stable").reset_index(drop=True)
     P["rs"] = (P.groupby("date")["RET120"].rank(pct=True) >= 0.7).fillna(False)
+    P["f_rs"] = P.groupby("date")["RET120"].rank(pct=True)
+    P["f_rs20"] = P.groupby("date")["f_ret20"].rank(pct=True)
+    fcols = [c for c in P.columns if c.startswith("f_")]
+    X = np.hstack([P[fcols].values.astype(np.float32), P[keys].values.astype(np.float32)])
+    X[~np.isfinite(X)] = np.nan
     return Panel(meta=meta, frames=frames, date=P["date"].values, sid=P["sid"].values,
                  O=P.O.values, H=P.H.values, L=P.L.values, C=P.C.values,
-                 atrp=P.atrp.values, cond=P[keys].values.astype(bool), keys=keys, warm=P.warm.values)
+                 atrp=P.atrp.values, cond=P[keys].values.astype(bool), keys=keys, warm=P.warm.values,
+                 feat=X, feat_names=[c[2:] for c in fcols] + ["c_" + k for k in keys])
 
 
 # ── 거래 시뮬레이션 ─────────────────────────────────────────────

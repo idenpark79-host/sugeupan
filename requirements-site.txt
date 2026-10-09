@@ -4,3 +4,4 @@ numpy>=1.24
 yfinance>=0.2.40
 finance-datareader>=0.9.90
 pykrx>=1.2
+scikit-learn>=1.4
