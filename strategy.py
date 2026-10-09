@@ -252,6 +252,7 @@ class Strategy:
     score: float
     avg_tr: float = 0.0
     sd: float = 0.0
+    sd_tr: float = 0.0
     kt: float = 2.0
     ks: float = 1.5
     rets: np.ndarray = field(default=None, repr=False)
@@ -283,12 +284,33 @@ def _stats(ev, ret, hit, train_mask):
                 n_tr=int(tr.sum()), win_tr=w[tr].mean() if tr.any() else 0,
                 n_te=int(te.sum()), win_te=w[te].mean() if te.any() else 0,
                 avg_te=r[te].mean() if te.any() else 0, avg_tr=r[tr].mean() if tr.any() else 0,
-                sd=r.std() if n > 1 else 0)
+                sd=r.std() if n > 1 else 0, sd_tr=r[tr].std() if tr.sum() > 1 else 0)
 
 
 def _lcb(s: dict) -> float:
     """기대 수익률의 보수적 하한 (표본이 적거나 변동이 크면 낮아짐)."""
     return s["avg"] - 1.64 * s["sd"] / math.sqrt(max(s["n"], 1))
+
+
+def _lcb_tr(s: dict) -> float:
+    """학습 구간만으로 계산한 하한 — 백테스트용 (검증 구간을 전혀 보지 않음)."""
+    return s["avg_tr"] - 1.64 * s["sd_tr"] / math.sqrt(max(s["n_tr"], 1))
+
+
+def _dedupe(results, n):
+    top, seen, sigs = [], [], set()
+    for s in results:
+        if any(set(s.combo) >= set(t) or set(s.combo) <= set(t) for t in seen):
+            continue
+        sig = (s.n, round(s.win, 4), round(s.avg, 5))      # 결과가 똑같은 조합(같은 신호) 제외
+        if sig in sigs:
+            continue
+        sigs.add(sig)
+        top.append(s)
+        seen.append(s.combo)
+        if len(top) >= n:
+            break
+    return top
 
 
 def mine(pn: Panel, cfg: dict) -> ScanResult:
@@ -305,7 +327,7 @@ def mine(pn: Panel, cfg: dict) -> ScanResult:
 
     min_tr, min_te = cfg.get("min_train_signals", 60), cfg.get("min_test_signals", 30)
     K = len(pn.keys)
-    results = []
+    results, results_tr = [], []
     tested = 0
     active = [i for i in range(K) if pn.cond[:, i].any()]       # 데이터가 없는 조건(수급 등)은 제외
     for r in range(1, cfg.get("max_combo", 3) + 1):
@@ -318,30 +340,24 @@ def mine(pn: Panel, cfg: dict) -> ScanResult:
             s = _stats(ev, ret, hit, train)
             if s["n_tr"] < min_tr or s["n_te"] < min_te:
                 continue
+            if s["avg_tr"] > 0:                               # 백테스트용: 학습 구간만 보고 고른 후보
+                results_tr.append(Strategy(tuple(pn.keys[i] for i in combo), score=_lcb_tr(s), **s))
             if s["avg_te"] <= 0 or s["avg_tr"] <= 0:          # 학습·검증 구간 모두 기대 수익이 플러스여야 채택
                 continue
             results.append(Strategy(tuple(pn.keys[i] for i in combo), score=_lcb(s), **s))
 
     results.sort(key=lambda s: s.score, reverse=True)
     # 거의 같은 조합(상위 조합을 포함하는 부분집합) 중복 제거
-    top, seen, sigs = [], [], set()
-    for s in results:
-        if any(set(s.combo) >= set(t) or set(s.combo) <= set(t) for t in seen):
-            continue
-        sig = (s.n, round(s.win, 4), round(s.avg, 5))      # 결과가 똑같은 조합(같은 신호) 제외
-        if sig in sigs:
-            continue
-        sigs.add(sig)
-        top.append(s)
-        seen.append(s.combo)
-        if len(top) >= cfg.get("top_strategies", 10):
-            break
+    top = _dedupe(results, cfg.get("top_strategies", 10))
+    results_tr.sort(key=lambda s: s.score, reverse=True)
+    top_bt = _dedupe(results_tr, cfg.get("top_strategies", 10))
+    top_bt = [next((t for t in top if t.combo == x.combo), x) for x in top_bt]   # 같은 조합은 같은 객체 공유
 
     # 상위 기법별 목표가·손절가 배수 최적화 (학습 구간 기대수익 최대)
     grid_t = cfg.get("exit_grid", {}).get("target_atr", [1.5, 2.0, 2.5, 3.0, 4.0])
     grid_s = cfg.get("exit_grid", {}).get("stop_atr", [1.0, 1.5, 2.0, 2.5])
     sims = {(kt, ks): simulate(pn, kt, ks, H, cost) for kt in grid_t for ks in grid_s}
-    for s in top:
+    for s in top + [x for x in top_bt if all(x is not t for t in top)]:
         m = pn.cond[:, [pn.keys.index(k) for k in s.combo]].all(axis=1)
         best = None
         for (kt, ks), (r2, h2, v2) in sims.items():
@@ -361,6 +377,8 @@ def mine(pn: Panel, cfg: dict) -> ScanResult:
             setattr(s, k, v)
         s.rets = r2[ev]
         s.score = _lcb(st)
+    top_bt = [s for s in top_bt if s.avg_tr > 0]
+    top_bt.sort(key=lambda s: s.avg_tr, reverse=True)
     # 매도 기준 재최적화 후 결과가 같아진 조합 제거
     uniq, sigs = [], set()
     for s in top:
@@ -375,7 +393,10 @@ def mine(pn: Panel, cfg: dict) -> ScanResult:
 
     picks = recommend(pn, top, sims, cfg)
     d0, d1 = pd.Timestamp(dates[0]), pd.Timestamp(dates[-1])
-    return ScanResult(base, top, picks, len(pn.frames), (d0, d1), H, tested)
+    out = ScanResult(base, top, picks, len(pn.frames), (d0, d1), H, tested)
+    out.split = split
+    out.bt_strategies = top_bt
+    return out
 
 
 # ── 오늘의 추천 ───────────────────────────────────────────────

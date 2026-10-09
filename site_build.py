@@ -31,6 +31,7 @@ except ImportError:
     pass
 
 import analysis
+import backtest
 import data as rawdata
 import indicators
 import model
@@ -132,6 +133,24 @@ class Source:
             log("외국인 지분율 실패", e)
         return u
 
+    def sectors(self, lst: pd.DataFrame) -> dict:
+        if self.demo:
+            names = ["전기·전자", "운송장비·부품", "화학", "제약", "금융", "IT 서비스", "유통", "기계·장비", "건설", "음식료·담배", "철강·금속", "통신"]
+            r = np.random.default_rng(11)
+            fixed = {"005930": "전기·전자", "000660": "전기·전자", "005380": "운송장비·부품", "000270": "운송장비·부품",
+                     "035420": "IT 서비스", "035720": "IT 서비스", "051910": "화학", "006400": "전기·전자",
+                     "068270": "제약", "105560": "금융", "012330": "운송장비·부품", "247540": "전기·전자",
+                     "086520": "화학", "028300": "제약", "196170": "제약", "042700": "기계·장비"}
+            return {c: fixed.get(c, names[r.integers(len(names))]) for c in lst.Code}
+        out = {}
+        for mk in ("KOSPI", "KOSDAQ"):
+            try:
+                df = self.k.get_market_sector_classifications(self.day, mk)
+                out.update({str(c): str(v) for c, v in zip(df.index, df["업종명"])})
+            except Exception as e:
+                log("업종 분류 실패", mk, e)
+        return out
+
     def index(self, name: str, days=400) -> pd.DataFrame:
         sym = {"KOSPI": "^KS11", "KOSDAQ": "^KQ11", "S&P 500": "^GSPC", "NASDAQ": "^IXIC", "원/달러": "KRW=X"}[name]
         if self.demo:
@@ -208,17 +227,20 @@ def build_market(src: Source, lst: pd.DataFrame):
     return kospi_dates
 
 
-def build_listing(lst: pd.DataFrame, detail: set, flowset: set):
+def build_listing(lst: pd.DataFrame, detail: set, flowset: set, metrics: dict, sectors: dict):
     log("종목 목록", len(lst))
     rows = []
     for r in lst.itertuples():
+        mt = metrics.get(r.Code, {})
         rows.append([r.Code, r.Name, "P" if r.Market == "KOSPI" else "Q", r2(r.Close), r2(r.Change), r2(r.ChangePct),
                      int(r.Volume or 0), r1(r.Amount / 1e8), r1(r.Marcap / 1e8),
                      r2(getattr(r, "PER", None)), r2(getattr(r, "PBR", None)), r2(getattr(r, "DIV", None)),
                      r2(getattr(r, "FRG", None)), (1 if r.Code in detail else 0) + (2 if r.Code in flowset else 0),
-                     r2(r.Open), r2(r.High), r2(r.Low)])
+                     r2(r.Open), r2(r.High), r2(r.Low), sectors.get(r.Code, "기타")]
+                    + [(int(mt[k]) if k in ("align", "nh", "nl") or k.endswith("S") else r2(mt[k]))
+                       if mt.get(k) is not None and mt.get(k) == mt.get(k) else None for k in MET_FIELDS])
     dump("stocks.json", {"fields": ["code", "name", "mkt", "price", "chg", "pct", "vol", "amt", "cap", "per", "pbr",
-                                    "div", "frg", "has", "open", "high", "low"], "rows": rows})
+                                    "div", "frg", "has", "open", "high", "low", "sector"] + MET_FIELDS, "rows": rows})
 
 
 def build_ranks(src: Source, lst: pd.DataFrame, kospi_dates):
@@ -273,11 +295,13 @@ def build_details(src: Source, lst: pd.DataFrame, detail: list, flowset: set, sc
 
     flows = pmap(get_flow, [c for c in detail if c in flowset and c in hists], 4, "수급")
     names = dict(zip(lst.Code, lst.Name))
+    metrics = {}
     for code, h in hists.items():
         h = h[h.Close > 0].iloc[-330:]
         if len(h) < 30:
             continue
         d = indicators.add_indicators(h)
+        metrics[code] = _metrics(d, flows.get(code))
         obj = {"ohlcv": [[t.strftime("%Y-%m-%d"), r2(o), r2(hi), r2(lo), r2(c), int(v)]
                          for t, o, hi, lo, c, v in zip(h.index, h.Open, h.High, h.Low, h.Close, h.Volume)]}
         try:
@@ -293,6 +317,43 @@ def build_details(src: Source, lst: pd.DataFrame, detail: list, flowset: set, sc
             obj["flow"] = {"dates": f.index.strftime("%Y-%m-%d").tolist(),
                            **{i: [r2(v / 1e8) for v in f[i]] for i in INV4}}
         dump(f"s/{code}.json", obj)
+    return metrics
+
+
+def _streak(x):
+    k = 0
+    for v in x[::-1]:
+        if not v or (k and (v > 0) != (k > 0)):
+            break
+        k += 1 if v > 0 else -1
+    return k
+
+
+def _metrics(d: pd.DataFrame, f) -> dict:
+    """조건 검색·순위용 종목 지표."""
+    c = d.Close
+    ret = lambda n: (c.iloc[-1] / c.iloc[-1 - n] - 1) * 100 if len(c) > n else None
+    hi = c.iloc[-250:].max()
+    lo = c.iloc[-250:].min()
+    last = d.iloc[-1]
+    mas = [last.get(f"MA{n}") for n in (5, 20, 60, 120)]
+    align = 1 if all(pd.notna(mas)) and mas == sorted(mas, reverse=True) else -1 if all(pd.notna(mas)) and mas == sorted(mas) else 0
+    m = {"r1w": ret(5), "r1m": ret(21), "r3m": ret(63), "r6m": ret(126), "r1y": ret(245),
+         "rsi": last.RSI, "hi52": (c.iloc[-1] / hi - 1) * 100, "lo52": (c.iloc[-1] / lo - 1) * 100,
+         "volr": last.Volume / last.VOL_MA20 if last.VOL_MA20 else None, "align": align,
+         "d20": (c.iloc[-1] / last.MA20 - 1) * 100 if pd.notna(last.MA20) else None,
+         "nh": int(d.High.iloc[-1] >= d.High.iloc[-250:].max()), "nl": int(d.Low.iloc[-1] <= d.Low.iloc[-250:].min()),
+         "atr": last.ATR_pct * 100}
+    if f is not None and len(f):
+        for key, col in (("frg", "외국인"), ("inst", "기관합계"), ("pen", "연기금")):
+            x = f[col].fillna(0).values
+            m[key + "1"], m[key + "5"], m[key + "20"] = x[-1] / 1e8, x[-5:].sum() / 1e8, x[-20:].sum() / 1e8
+            m[key + "S"] = _streak(x)
+    return m
+
+
+MET_FIELDS = ["r1w", "r1m", "r3m", "r6m", "r1y", "rsi", "hi52", "lo52", "volr", "align", "d20", "nh", "nl", "atr",
+              "frg1", "frg5", "frg20", "frgS", "inst1", "inst5", "inst20", "instS", "pen1", "pen5", "pen20", "penS"]
 
 
 def build_ai(res, lst):
@@ -450,6 +511,14 @@ def main():
             res.used_flows = bool(scan_flows)
             log("기대 수익률 모델 (워크포워드 학습)")
             mr = model.run(pn, sc, top_n=SITE.get("rec_count", 20), log=log)
+            log("포트폴리오 백테스트")
+            try:
+                dump("bt.json", backtest.run(pn, mr, res, kospi["Close"], sc, log=log))
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                log("백테스트 실패", e)
+                dump("bt.json", {"ok": False})
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -463,10 +532,10 @@ def main():
                 | {p["code"] for p in (mr.picks if mr else [])})
         detail = [c for c in detail if c in keep]
     flowset = set(lst[lst.Marcap >= SITE["flow_min_marcap"]].Code)
-    build_details(src, lst, detail, flowset, scan_prices, scan_flows)
+    metrics = build_details(src, lst, detail, flowset, scan_prices, scan_flows)
     have = {p.stem for p in (OUT / "s").glob("*.json")}
     have_flow = {c for c in have if c in flowset}
-    build_listing(lst, have, have_flow)
+    build_listing(lst, have, have_flow, metrics, src.sectors(lst))
     now = datetime.now(KST)
     dump("meta.json", {"updated": now.strftime("%Y-%m-%d %H:%M"), "asof": pd.Timestamp(src.day).strftime("%Y-%m-%d"),
                        "demo": args.demo})

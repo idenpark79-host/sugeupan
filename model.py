@@ -47,6 +47,8 @@ class ModelResult:
     exit_table: list               # [(kt, ks, 상위N 평균 수익, 승률)]
     lifts: dict = field(default_factory=dict)
     recent: list = field(default_factory=list)
+    pred: np.ndarray = field(default=None, repr=False)     # 워크포워드 예측 점수 (백테스트용)
+    iso_r: object = field(default=None, repr=False)
 
 
 def _reg():
@@ -201,4 +203,4 @@ def run(pn: strategy.Panel, cfg: dict, top_n: int = 20, log=print) -> ModelResul
         top_avg=float(ret[ti].mean()), top_win=float((ret[ti] > 0).mean()), top_hit=float(hit[ti].mean()),
         top_n=top_n, ic=ic, deciles=deciles, monthly=monthly, n_train=len(iall), n_oos=int(oos.sum()),
         oos_period=(pd.Timestamp(od.min()), pd.Timestamp(od.max())), folds=len(starts), years=years,
-        kt=kt, ks=ks, horizon=H, exit_table=exit_table, lifts=lifts, recent=recent)
+        kt=kt, ks=ks, horizon=H, exit_table=exit_table, lifts=lifts, recent=recent, pred=pred, iso_r=iso_r)
