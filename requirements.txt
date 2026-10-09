@@ -1,0 +1,10 @@
+certifi
+yfinance>=0.2.40
+pandas>=2.0
+numpy>=1.24
+matplotlib>=3.7
+finance-datareader>=0.9.90
+pykrx>=1.2
+streamlit>=1.45
+plotly>=5.20
+# anthropic>=0.40   (AI 코멘트 사용 시)
