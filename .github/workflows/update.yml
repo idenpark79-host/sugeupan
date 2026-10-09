@@ -1,12 +1,12 @@
-name: 수급판 데이터 갱신·배포
+name: Wake 데이터 갱신·배포
 
 on:
   schedule:
-    - cron: "41 7 * * 1-5"
-  workflow_dispatch:
+    - cron: "41 9 * * 1-5"      # 평일 18:41 (한국시간) — 투자자별 매매동향 확정 후
+  workflow_dispatch:             # Actions 화면에서 수동 실행
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -32,10 +32,19 @@ jobs:
           KRX_PW: ${{ secrets.KRX_PW }}
         run: |
           if [ -z "$KRX_ID" ]; then
-            echo "KRX_ID 시크릿이 없어 가상 데이터로 생성합니다."
+            echo "KRX_ID 시크릿이 없어 미리보기용 가상 데이터로 생성합니다."
             python site_build.py --demo
           else
             python site_build.py
+          fi
+      - name: 추천 성적 기록 저장
+        run: |
+          if [ -f track/picks.csv ]; then
+            git config user.name "wake-bot"
+            git config user.email "wake-bot@users.noreply.github.com"
+            git add track/picks.csv
+            git commit -m "추천 성적 기록 $(TZ=Asia/Seoul date +%F)" || echo "변경 없음"
+            git push || echo "기록 저장 실패"
           fi
       - uses: actions/upload-pages-artifact@v3
         with:
