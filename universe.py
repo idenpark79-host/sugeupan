@@ -162,14 +162,22 @@ def _fetch_flow_one(code: str, years: int, demo: bool, index=None) -> pd.DataFra
     from pykrx import stock
     end = pd.Timestamp.today()
     start = end - pd.DateOffset(years=years, days=10)
-    for attempt in range(3):
-        try:
-            df = normalize_flow(stock.get_market_trading_value_by_date(
-                start.strftime("%Y%m%d"), end.strftime("%Y%m%d"), code, detail=True))
-            df.to_csv(f)
-            return df
-        except Exception:
-            time.sleep(1 + attempt)
+    parts, a = [], start
+    while a < end:                                        # 긴 기간은 2년 단위로 나눠 조회
+        b = min(a + pd.DateOffset(years=2), end)
+        for attempt in range(3):
+            try:
+                parts.append(normalize_flow(stock.get_market_trading_value_by_date(
+                    a.strftime("%Y%m%d"), b.strftime("%Y%m%d"), code, detail=True)))
+                break
+            except Exception:
+                time.sleep(1 + attempt)
+        a = b + pd.Timedelta(days=1)
+    if parts:
+        df = pd.concat(parts)
+        df = df[~df.index.duplicated(keep="last")].sort_index()
+        df.to_csv(f)
+        return df
     raise RuntimeError(f"{code} 매매동향 수집 실패")
 
 

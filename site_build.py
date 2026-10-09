@@ -106,7 +106,7 @@ class Source:
             u = pd.concat([real, u, small], ignore_index=True)
             rows = []
             for c in u.Code:
-                h = rawdata.demo_series(c, 756)
+                h = rawdata.demo_series(c, 2520)
                 a, b = h.iloc[-1], h.iloc[-2]
                 rows.append((a.Open, a.High, a.Low, a.Close, a.Close - b.Close, (a.Close / b.Close - 1) * 100,
                              a.Volume, a.Volume * a.Close))
@@ -255,7 +255,7 @@ def build_details(src: Source, lst: pd.DataFrame, detail: list, flowset: set, sc
         if code in scan_prices:
             return scan_prices[code].iloc[-330:]
         if src.demo:
-            return rawdata.demo_series(code, 756).iloc[-330:]
+            return rawdata.demo_series(code, 2520).iloc[-330:]
         import FinanceDataReader as fdr
         start = (pd.Timestamp(src.day) - pd.Timedelta(days=500)).strftime("%Y-%m-%d")
         return rawdata._normalize(fdr.DataReader(code, start))
@@ -313,7 +313,8 @@ def build_ai(res, lst):
         "baseline": {k: r2(v * 100) if k != "n" else int(v) for k, v in res.baseline.items()},
         "strategies": [{"name": s.name, "conds": [[strategy.COND_NAME[k], strategy.COND_DESC[k]] for k in s.combo],
                         "n": int(s.n), "win": r1(s.win * 100), "avg": r2(s.avg * 100), "hit": r1(s.hit * 100),
-                        "winTr": r1(s.win_tr * 100), "winTe": r1(s.win_te * 100), "kt": s.kt, "ks": s.ks}
+                        "winTr": r1(s.win_tr * 100), "winTe": r1(s.win_te * 100), "avgTe": r2(s.avg_te * 100),
+                        "kt": s.kt, "ks": s.ks}
                        for s in res.strategies],
         "hist": {"edges": [r2(e) for e in edges], "counts": cnt.tolist(), "mean": r2(r.mean())},
         "picks": [{"code": p.code, "name": names.get(p.code, p.name), "close": r2(p.close), "chg": r2(p.chg),
@@ -334,45 +335,78 @@ def write_index():
         '</head><body>' + body + '</body></html>', encoding="utf-8")
 
 
+def merge_picks(mr, res, n=20, force_ai=False):
+    """AI 모델 후보 + 검증 신호 후보를 합쳐 기대 수익률(검증 기간 기준) 높은 순으로 정렬."""
+    out = {}
+    use_ai = bool(mr) and (force_ai or (mr.top_avg > mr.base_avg and mr.top_avg > 0))   # 검증 기간에 기준을 이긴 경우에만 채택
+    for p in (mr.picks if use_ai else []):
+        out[p["code"]] = dict(p, src=["AI 모델"])
+    for p in (res.picks if res else []):
+        s = p.strategy
+        cand = {"code": p.code, "name": p.name, "close": p.close, "chg": p.chg, "pct": p.chg_pct,
+                "exp": float(s.avg_te), "prob": float(s.win_te), "target": p.target, "stop": p.stop,
+                "atrp": float(p.df.ATR_pct.iloc[-1]), "df": p.df, "src": ["검증 신호"],
+                "why": [(strategy.COND_NAME[k], strategy.COND_DESC[k]) for k in s.combo],
+                "signal": s.name, "sigN": int(s.n)}
+        if p.code in out:
+            prev = out[p.code]
+            if cand["exp"] > prev["exp"]:
+                cand["src"] = ["검증 신호", "AI 모델"]
+                out[p.code] = cand
+            else:
+                prev["src"] = ["AI 모델", "검증 신호"]
+                prev["signal"], prev["sigN"] = cand["signal"], cand["sigN"]
+        else:
+            out[p.code] = cand
+    picks = sorted(out.values(), key=lambda p: -p["exp"])
+    return [p for p in picks if p["exp"] > 0][:n], len(picks), use_ai
+
+
 def build_model(mr, res, lst, src, prices: dict, demo: bool):
-    """확률 추천(rec.json)과 누적 성적(track.json)."""
-    log("확률 추천·누적 성적")
-    if mr is None:
+    """통합 추천(rec.json)과 누적 성적(track.json)."""
+    log("통합 추천·누적 성적")
+    if mr is None and res is None:
         dump("rec.json", {"ok": False})
         dump("track.json", {"total": 0})
         return
     names = dict(zip(lst.Code, lst.Name))
-    dump("rec.json", {
-        "ok": True, "horizon": mr.horizon, "kt": mr.kt, "ks": mr.ks, "auc": r2(mr.auc),
-        "base": r1(mr.base_win * 100), "top": r1(mr.top_win * 100), "topAvg": r2(mr.top_avg * 100),
-        "topHit": r1(mr.top_hit * 100), "topN": mr.top_n, "nTrain": mr.n_train, "nTest": mr.n_test,
-        "test": [mr.test_period[0].strftime("%Y-%m-%d"), mr.test_period[1].strftime("%Y-%m-%d")],
-        "nStocks": len(prices), "usedFlows": bool(getattr(res, "used_flows", False)),
-        "calib": [[r1(a * 100), r1(b * 100), n] for a, b, n in mr.calib],
-        "monthly": [[m, r1(w * 100), r2(a * 100), n] for m, w, a, n in mr.monthly],
-        "picks": [{"code": p["code"], "name": names.get(p["code"], p["name"]), "close": r2(p["close"]),
-                   "chg": r2(p["chg"]), "pct": r2(p["pct"]), "prob": r1(p["prob"] * 100),
-                   "exp": r2(p["exp"] * 100), "hitp": r1(p["hitp"] * 100),
-                   "target": round(p["target"]), "stop": round(p["stop"]), "atr": r2(p["atrp"] * 100),
-                   "why": [[a, b] for a, b in p["why"]]} for p in mr.picks]})
+    picks, n_cand, use_ai = merge_picks(mr, res, SITE.get("rec_count", 20), force_ai=demo)
+    rec = {"ok": True, "horizon": mr.horizon if mr else 20, "nStocks": len(prices), "nCand": n_cand, "aiUsed": use_ai,
+           "nSignals": len(res.strategies) if res else 0,
+           "usedFlows": bool(getattr(res, "used_flows", False)),
+           "picks": [{"code": p["code"], "name": names.get(p["code"], p["name"]), "close": r2(p["close"]),
+                      "chg": r2(p["chg"]), "pct": r2(p["pct"]), "exp": r2(p["exp"] * 100), "prob": r1(p["prob"] * 100),
+                      "target": round(p["target"]), "stop": round(p["stop"]), "atr": r2(p["atrp"] * 100),
+                      "src": p["src"], "signal": p.get("signal"), "sigN": p.get("sigN"),
+                      "why": [[a, b] for a, b in p["why"]]} for p in picks]}
+    if mr:
+        rec["model"] = {
+            "baseAvg": r2(mr.base_avg * 100), "baseWin": r1(mr.base_win * 100), "topAvg": r2(mr.top_avg * 100),
+            "topWin": r1(mr.top_win * 100), "topHit": r1(mr.top_hit * 100), "topN": mr.top_n, "ic": r2(mr.ic * 100),
+            "deciles": [[r2(a * 100), r2(b * 100), r1(c * 100), d] for a, b, c, d in mr.deciles],
+            "monthly": [[m, r2(a * 100), r1(w * 100), k] for m, a, w, k in mr.monthly],
+            "folds": mr.folds, "years": round(mr.years, 1), "nTrain": mr.n_train, "nOos": mr.n_oos,
+            "oos": [mr.oos_period[0].strftime("%Y-%m-%d"), mr.oos_period[1].strftime("%Y-%m-%d")],
+            "kt": mr.kt, "ks": mr.ks, "exits": [[a, b, r2(c * 100), r1(d * 100)] for a, b, c, d in mr.exit_table]}
+    dump("rec.json", rec)
 
     day = pd.Timestamp(src.day).strftime("%Y-%m-%d")
     path = (OUT / "_track_demo.csv") if demo else (ROOT / "track" / "picks.csv")
     tr = track.load(path)
-    if demo and tr.empty and mr.recent:                     # 미리보기: 검증 구간 추천으로 예시 성적 생성
-        tr = pd.concat([tr, pd.DataFrame(mr.recent).assign(status="open")], ignore_index=True)
+    if demo and tr.empty and mr and mr.recent:            # 미리보기: 검증 구간 추천으로 예시 성적 생성
+        tr = pd.DataFrame(mr.recent).assign(status="open").reindex(columns=track.COLS)
     need = set(tr[tr.status == "open"].code) - set(prices)
     extra = {}
     if need and not demo:
         import FinanceDataReader as fdr
-        start = (pd.Timestamp(day) - pd.Timedelta(days=60)).strftime("%Y-%m-%d")
+        start = (pd.Timestamp(day) - pd.Timedelta(days=90)).strftime("%Y-%m-%d")
         for c in need:
             try:
                 extra[c] = rawdata._normalize(fdr.DataReader(c, start))
             except Exception:
                 pass
-    tr = track.update(tr, {**prices, **extra}, horizon=mr.horizon)
-    tr = track.add_today(tr, day, [{**p, "code": p["code"]} for p in mr.picks], n=10)
+    tr = track.update(tr, {**prices, **extra}, horizon=rec["horizon"])
+    tr = track.add_today(tr, day, picks, n=10)
     if not demo:
         path.parent.mkdir(exist_ok=True)
         tr.to_csv(path, index=False)
@@ -406,7 +440,7 @@ def main():
             u = lst[lst.Marcap >= sc.get("min_marcap", 1e12)][["Code", "Name", "Market", "Marcap"]]
             u = u[u.Code.str.endswith("0") & ~u.Name.str.contains("스팩|리츠")].sort_values(
                 "Marcap", ascending=False).reset_index(drop=True)
-            years = sc.get("history_years", 3)
+            years = sc.get("history_years", 10)
             scan_prices = universe.fetch_all(list(u.Code), years, args.demo)
             scan_flows = universe.fetch_flows(scan_prices, years, args.demo)
             kospi = (rawdata.demo_series("^KS11", 252 * years) if args.demo
@@ -414,7 +448,7 @@ def main():
             pn = strategy.build_panel(scan_prices, u, kospi["Close"], scan_flows)
             res = strategy.mine(pn, sc)
             res.used_flows = bool(scan_flows)
-            log("상승 확률 모델")
+            log("기대 수익률 모델 (워크포워드 학습)")
             mr = model.run(pn, sc, top_n=SITE.get("rec_count", 20), log=log)
         except Exception as e:
             import traceback

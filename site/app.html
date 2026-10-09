@@ -413,16 +413,16 @@ function drawSide() {
   const tr = S.track || {};
   el.innerHTML = `
     <section class="panel sb"><h3>AI 추천 <a href="#ai">전체</a></h3>
-      <div class="lbl" style="margin-top:2px">1개월 내 수익 확률 높은 순</div>
+      <div class="lbl" style="margin-top:2px">1개월 기대 수익률 높은 순</div>
       <div class="list" style="margin-top:6px">${rec.map((p, i) => `<button class="mini" data-go="${p.code}">
         <span class="rk num">${i + 1}</span><span class="nm">${esc(p.name)}<small class="num">${n(p.close)} <span class="${cls(p.pct)}">${pct(p.pct)}</span></small></span>
-        <span class="v num">${p1(p.prob)}%<small class="flat">목표 ${pct((p.target / p.close - 1) * 100)}</small></span></button>`).join("") || `<div class="empty">추천 없음</div>`}</div></section>
+        <span class="v num up">${pct(p.exp)}<small class="flat">확률 ${p1(p.prob)}%</small></span></button>`).join("") || `<div class="empty">오늘은 관망</div>`}</div></section>
     <section class="panel sb"><h3>투자자 순매수 <a href="#flows">전체</a></h3>
       <div class="controls">${seg("sbi", [["외국인", "외국인"], ["기관합계", "기관"], ["연기금", "연기금"]], st.sbInv)}${seg("sbm", [["KOSPI", "코스피"], ["KOSDAQ", "코스닥"]], st.sbMk)}</div>
       <div class="lbl">최근 1주 순매수 상위</div><div class="list" id="sbl"></div></section>
     ${tr.total ? `<section class="panel sb"><h3>추천 실전 성적 <a href="#ai">상세</a></h3>
-      <div class="kpi num"><div><div class="lbl">종료된 추천 승률</div><div class="v">${tr.closed ? p1(tr.win * 100) + "%" : "-"}</div></div>
-        <div><div class="lbl">평균 수익</div><div class="v ${cls(tr.avg)}">${tr.closed ? pct(tr.avg * 100) : "-"}</div></div></div>
+      <div class="kpi num"><div><div class="lbl">평균 수익</div><div class="v ${cls(tr.avg)}">${tr.closed ? pct(tr.avg * 100) : "-"}</div></div>
+        <div><div class="lbl">승률</div><div class="v">${tr.closed ? p1(tr.win * 100) + "%" : "-"}</div></div></div>
       <p class="note" style="margin:8px 0 6px">${tr.since ? tr.since.replaceAll("-", ".") + "부터 " : ""}누적 ${tr.total}건 · 종료 ${tr.closed}건 · 진행 ${tr.open}건</p></section>` : ""}`;
   const drawL = () => {
     const r = S.rank?.[st.sbMk]?.[st.sbInv]?.["5"] || [];
@@ -451,7 +451,7 @@ function viewHome() {
     <section class="idx">${idx}</section>
     ${top.length ? `<section class="sec narrow-only"><div class="sec-h"><h2>AI 추천 상위</h2><a class="link" href="#ai">전체 보기</a></div>
       <div class="panel pad list">${top.map((p, i) => `<button class="row" data-go="${p.code}"><span class="rk num">${i + 1}</span>
-        <span class="nm">${esc(p.name)}<small>목표 ${n(p.target)} · 손절 ${n(p.stop)}</small></span><span class="px num">${p1(p.prob)}%</span>
+        <span class="nm">${esc(p.name)}<small>목표 ${n(p.target)} · 손절 ${n(p.stop)}</small></span><span class="px num up">${pct(p.exp)}</span>
         <span class="ch num ${cls(p.pct)}">${n(p.close)}</span></button>`).join("")}</div></section>` : ""}
     <section class="sec grid2">
       <div><div class="sec-h"><h2>오늘의 수급</h2>${seg("mk", [["KOSPI", "코스피"], ["KOSDAQ", "코스닥"]], st.mk)}</div><div class="panel pad" id="flowbox"></div></div>
@@ -602,9 +602,9 @@ async function viewStock(code) {
       <div class="controls"><button class="btn ${inW ? "" : "pri"}" id="wbtn">${inW ? "관심 해제" : "관심 추가"}</button>
         <a class="btn" href="https://finance.naver.com/item/news.naver?code=${code}" target="_blank" rel="noopener">뉴스</a>
         <a class="btn" href="https://finance.naver.com/item/main.naver?code=${code}" target="_blank" rel="noopener">공시·재무</a></div></section>
-    ${pick ? `<section class="sec panel pad" style="margin-top:16px"><div class="lbl">AI 추천 ${rp + 1}위 · 1개월 내 수익 확률</div>
+    ${pick ? `<section class="sec panel pad" style="margin-top:16px"><div class="lbl">추천 ${rp + 1}위 · 1개월 기대 수익률 (${pick.src.join(" · ")})</div>
       <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:baseline;margin-top:4px" class="num">
-        <span style="font-size:28px;font-weight:700;letter-spacing:-.6px">${p1(pick.prob)}%</span>
+        <span style="font-size:28px;font-weight:700;letter-spacing:-.6px" class="up">${pct(pick.exp)}</span><span class="flat">수익 확률 ${p1(pick.prob)}%</span>
         <span>목표가 <b class="up">${n(pick.target)}</b> <span class="flat">(${pct((pick.target / pick.close - 1) * 100)})</span></span>
         <span>손절가 <b class="down">${n(pick.stop)}</b> <span class="flat">(${pct((pick.stop / pick.close - 1) * 100)})</span></span>
         <span class="flat">기한 ${S.rec.horizon}거래일</span></div>
@@ -693,78 +693,79 @@ async function viewStock(code) {
 
 /* ── AI 추천 ── */
 function viewAI() {
-  const R = S.rec, T = S.track || {};
+  const R = S.rec, T = S.track || {}, M = R?.model;
   if (!R?.ok) { $("#main").innerHTML = `${banner()}<div class="panel empty">오늘은 추천 결과가 없습니다.</div>${foot()}`; return; }
-  const P = R.picks, rows = P.map((p, i) => `<tr data-go="${p.code}">
+  const P = R.picks, mx = Math.max(...P.map(p => p.exp), 1);
+  const srcChips = p => p.src.map(x => `<span class="chip" style="border-color:var(--accent);color:var(--accent)">${x}</span>`).join("");
+  const rows = P.map((p, i) => `<tr data-go="${p.code}">
       <td class="num flat">${i + 1}</td><td class="l"><span class="nm">${esc(p.name)}<small>${p.code}</small></span></td>
       <td class="num"><b class="${cls(p.pct)}">${n(p.close)}</b><br><small class="${cls(p.pct)}">${pct(p.pct)}</small></td>
-      <td><div class="prob num"><span class="track"><i style="width:${p.prob}%"></i><em style="left:${R.base}%"></em></span><b>${p1(p.prob)}%</b></div></td>
-      <td class="num ${cls(p.exp)}">${pct(p.exp)}</td>
+      <td><div class="prob num"><span class="track"><i style="width:${Math.max(p.exp, 0) / mx * 100}%"></i></span><b class="up">${pct(p.exp)}</b></div></td>
+      <td class="num">${p1(p.prob)}%</td>
       <td class="num lv"><b class="up">${n(p.target)}</b><small class="up">${pct((p.target / p.close - 1) * 100)}</small></td>
       <td class="num lv"><b class="down">${n(p.stop)}</b><small class="down">${pct((p.stop / p.close - 1) * 100)}</small></td>
-      <td class="l why"><div class="chips">${p.why.slice(0, 3).map(w => `<span class="chip" title="${esc(w[1])}">${esc(w[0])}</span>`).join("")}</div></td></tr>`).join("");
+      <td class="l why"><div class="chips">${srcChips(p)}${p.why.slice(0, 2).map(w => `<span class="chip" title="${esc(w[1])}">${esc(w[0])}</span>`).join("")}</div></td></tr>`).join("");
   const cards = P.map((p, i) => `<button class="panel pad pick" data-go="${p.code}">
-      <div class="hd"><span class="nm">${i + 1}. ${esc(p.name)}<small>${p.code} · 근거 ${p.why.map(w => esc(w[0])).slice(0, 2).join(", ") || "-"}</small></span>
+      <div class="hd"><span class="nm">${i + 1}. ${esc(p.name)}<small>${p.src.join(" · ")} · ${p.why.map(w => esc(w[0])).slice(0, 2).join(", ") || "-"}</small></span>
         <span class="px num ${cls(p.pct)}">${n(p.close)}<small>${pct(p.pct)}</small></span></div>
-      <div class="lv3 num"><div><div class="k">수익 확률</div><div class="v">${p1(p.prob)}%</div></div>
-        <div><div class="k">목표가</div><div class="v up">${n(p.target)}</div></div><div><div class="k">손절가</div><div class="v down">${n(p.stop)}</div></div></div></button>`).join("");
-  // 보정 그래프
-  const W = 520, H = 220, pad = 34, cal = R.calib, lo = Math.min(...cal.map(c => Math.min(c[0], c[1])), R.base) - 3, hi = Math.max(...cal.map(c => Math.max(c[0], c[1]))) + 3;
-  const sx = v => pad + (v - lo) / (hi - lo) * (W - pad - 10), sy = v => H - pad + 6 - (v - lo) / (hi - lo) * (H - pad - 10);
-  const ticks = [lo, (lo + hi) / 2, hi].map(v => Math.round(v));
-  const calSvg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" role="img" aria-label="예측 확률과 실제 승률 비교">
-    ${ticks.map(v => `<line x1="${pad}" x2="${W - 10}" y1="${sy(v)}" y2="${sy(v)}" stroke="var(--line)"/><text x="${pad - 6}" y="${sy(v) + 4}" font-size="10.5" fill="var(--muted)" text-anchor="end">${v}%</text>
-      <text x="${sx(v)}" y="${H - 8}" font-size="10.5" fill="var(--muted)" text-anchor="middle">${v}%</text>`).join("")}
-    <line x1="${sx(lo)}" y1="${sy(lo)}" x2="${sx(hi)}" y2="${sy(hi)}" stroke="var(--line-strong)" stroke-dasharray="4 4"/>
-    <polyline fill="none" stroke="var(--accent)" stroke-width="2" points="${cal.map(c => `${sx(c[0])},${sy(c[1])}`).join(" ")}"/>
-    ${cal.map(c => `<circle cx="${sx(c[0])}" cy="${sy(c[1])}" r="3.5" fill="var(--accent)"/>`).join("")}</svg>`;
-  // 월별 막대 (검증 백테스트 또는 실전)
-  const bars = (rowsM, label) => { if (!rowsM?.length) return `<div class="empty">아직 데이터가 없습니다.</div>`;
-    const w = 520, h = 170, bw = (w - 40) / rowsM.length;
+      <div class="lv3 num"><div><div class="k">기대 수익</div><div class="v up">${pct(p.exp)}</div></div>
+        <div><div class="k">목표가</div><div class="v up">${n(p.target)}</div></div><div><div class="k">손절가</div><div class="v down">${n(p.stop)}</div></div></div>
+      <div class="lbl num">수익으로 끝날 확률 ${p1(p.prob)}%</div></button>`).join("");
+  // 막대 그래프 (양수 빨강 / 음수 파랑, 0 기준선)
+  const vbars = (items, label, ref) => { if (!items?.length) return `<div class="empty">아직 데이터가 없습니다.</div>`;
+    const w = 520, h = 180, top = 12, bot = 26, vals = items.map(x => x[1]).concat(ref ?? 0, 0);
+    const vmax = Math.max(...vals.map(Math.abs), 0.5), y0 = top + (h - top - bot) / 2, sc = (h - top - bot) / 2 / vmax, bw = (w - 44) / items.length;
     return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;display:block" role="img" aria-label="${label}">
-      <line x1="30" x2="${w}" y1="${h - 22 - (R.base / 100) * (h - 40)}" y2="${h - 22 - (R.base / 100) * (h - 40)}" stroke="var(--up)" stroke-dasharray="4 4"/>
-      ${[0, 50, 100].map(v => `<text x="26" y="${h - 22 - v / 100 * (h - 40) + 4}" font-size="10" fill="var(--muted)" text-anchor="end">${v}%</text>`).join("")}
-      ${rowsM.map((m, i) => { const v = m[1], bh = v / 100 * (h - 40), x = 32 + i * bw;
-        return `<rect x="${x + 2}" y="${h - 22 - bh}" width="${Math.max(bw - 4, 2)}" height="${bh}" rx="2" fill="var(--accent)" opacity=".85"><title>${m[0]} · ${v.toFixed(1)}% · ${m[3]}건</title></rect>
-        ${rowsM.length <= 14 || i % 2 === 0 ? `<text x="${x + bw / 2}" y="${h - 6}" font-size="10" fill="var(--muted)" text-anchor="middle">${m[0].slice(2).replace("-", ".")}</text>` : ""}`; }).join("")}</svg>`; };
-  const trRows = (a, open) => (a || []).map(r => `<tr data-go="${r[1]}" style="cursor:pointer"><td class="l">${r[0].slice(5).replace("-", ".")}</td><td class="l"><b>${esc(r[2])}</b></td><td class="num">${p1(r[4])}%</td>
-      <td class="num">${r[9] ? n(r[9]) : "-"}</td><td class="num up">${n(r[6])}</td><td class="num down">${n(r[7])}</td>
+      <line x1="40" x2="${w}" y1="${y0}" y2="${y0}" stroke="var(--line-strong)"/>
+      ${ref != null ? `<line x1="40" x2="${w}" y1="${y0 - ref * sc}" y2="${y0 - ref * sc}" stroke="var(--muted)" stroke-dasharray="4 4"/>` : ""}
+      ${[vmax, 0, -vmax].map(v => `<text x="36" y="${y0 - v * sc + 4}" font-size="10" fill="var(--muted)" text-anchor="end">${v > 0 ? "+" : ""}${v.toFixed(1)}%</text>`).join("")}
+      ${items.map((m, i) => { const v = m[1], x = 42 + i * bw, bh = Math.abs(v) * sc;
+        return `<rect x="${x + 2}" y="${v >= 0 ? y0 - bh : y0}" width="${Math.max(bw - 4, 2)}" height="${Math.max(bh, 1)}" rx="2" fill="var(${v >= 0 ? "--up" : "--down"})" opacity=".85"><title>${m[0]} · ${v > 0 ? "+" : ""}${v.toFixed(2)}% · ${m[3] ?? ""}건</title></rect>
+        ${items.length <= 14 || i % 3 === 0 ? `<text x="${x + bw / 2}" y="${h - 8}" font-size="10" fill="var(--muted)" text-anchor="middle">${String(m[0]).length > 5 ? String(m[0]).slice(2).replace("-", ".") : m[0]}</text>` : ""}`; }).join("")}</svg>`; };
+  const trRows = (a, open) => (a || []).map(r => `<tr data-go="${r[1]}" style="cursor:pointer"><td class="l">${r[0].slice(5).replace("-", ".")}</td><td class="l"><b>${esc(r[2])}</b></td>
+      <td class="num">${r[13] == null ? "-" : pct(r[13])}</td><td class="num">${r[9] ? n(r[9]) : "-"}</td><td class="num up">${n(r[6])}</td><td class="num down">${n(r[7])}</td>
       <td class="num ${cls(r[10])}">${r[10] == null ? "-" : pct(r[10])}</td><td class="num">${r[11] == null ? "대기" : r[11] + "일"}</td>
       <td>${open ? `<span class="st">진행 중</span>` : `<span class="st ${r[8]}">${r[8] === "win" ? "수익" : "손실"}</span>`}</td></tr>`).join("");
   const AI = S.ai;
+  const edge = M ? M.topAvg - M.baseAvg : null;
   $("#main").innerHTML = `${banner()}
-    <div class="sec-h"><div><h2 style="font-size:23px;letter-spacing:-.5px">1개월 상승 확률 추천</h2>
-      <p class="sub" style="margin:4px 0 0">${R.nStocks}개 종목의 지표·수급 데이터를 학습한 모델이, 지금 사서 ${R.horizon}거래일 안에 수익으로 끝날 확률이 높은 순서로 골랐습니다.</p></div></div>
+    <div class="sec-h"><div><h2 style="font-size:23px;letter-spacing:-.5px">1개월 기대 수익률 추천</h2>
+      <p class="sub" style="margin:4px 0 0">지금 사서 ${R.horizon}거래일 동안 목표가·손절가 규칙대로 운용했을 때, 과거 같은 조건의 종목들이 실제로 낸 평균 수익률이 높은 순서입니다.</p></div></div>
     <section class="stat">
-      <div class="panel"><div class="s">추천 상위 ${R.topN}개 실제 승률</div><div class="v num">${p1(R.top)}%</div><div class="s">검증 기간 · 기준 ${p1(R.base)}%</div></div>
-      <div class="panel"><div class="s">추천 1건당 평균 수익</div><div class="v num ${cls(R.topAvg)}">${pct(R.topAvg)}</div><div class="s">비용 0.25% 차감</div></div>
-      <div class="panel"><div class="s">실전 누적 승률</div><div class="v num">${T.closed ? p1(T.win * 100) + "%" : "집계 중"}</div><div class="s">${T.closed ? `종료 ${T.closed}건 · 예상 ${p1(T.expected * 100)}%` : `진행 ${T.open || 0}건 · 20거래일 후 첫 결과`}</div></div>
-      <div class="panel"><div class="s">모델 변별력 (AUC)</div><div class="v num">${n(R.auc, 2)}</div><div class="s">0.50 = 무작위 · 높을수록 좋음</div></div>
+      <div class="panel"><div class="s">AI 상위 ${M?.topN ?? 20}개 평균 수익</div><div class="v num ${cls(M?.topAvg)}">${M ? pct(M.topAvg) : "-"}</div><div class="s">실전 조건 검증 · 전체 평균 ${M ? pct(M.baseAvg) : "-"}</div></div>
+      <div class="panel"><div class="s">AI 상위 승률</div><div class="v num">${M ? p1(M.topWin) + "%" : "-"}</div><div class="s">전체 평균 ${M ? p1(M.baseWin) + "%" : "-"}</div></div>
+      <div class="panel"><div class="s">실전 누적 평균 수익</div><div class="v num ${cls(T.avg)}">${T.closed ? pct(T.avg * 100) : "집계 중"}</div><div class="s">${T.closed ? `종료 ${T.closed}건 · 예상 ${T.expectedAvg != null ? pct(T.expectedAvg * 100) : "-"}` : `진행 ${T.open || 0}건 · 약 1개월 후 첫 결과`}</div></div>
+      <div class="panel"><div class="s">학습 데이터</div><div class="v num">${M ? M.years + "년" : "-"}</div><div class="s">${R.nStocks}개 종목 · 6개월마다 재학습 검증 · 매일 자동 재학습</div></div>
     </section>
-    <section class="sec"><div class="sec-h"><h2>오늘의 추천</h2><span class="sub">목표가 도달 시 익절 · 손절가 이탈 시 손절 · ${R.horizon}거래일 뒤 정리 · 막대의 붉은 선 = 평균 승률</span></div>
-      <div class="panel rwrap scroll"><table class="rtable"><thead><tr><th>순위</th><th class="l">종목</th><th>현재가</th><th>수익 확률</th><th>기대 수익</th><th>목표가</th><th>손절가</th><th class="l">근거</th></tr></thead><tbody>${rows}</tbody></table></div>
-      <div class="cards">${cards}</div>
-      <p class="note">목표가·손절가는 오늘 종가 기준(일평균 변동폭 × ${R.kt} / × ${R.ks})입니다. 실제 매수가가 다르면 같은 비율로 조정하세요.</p></section>
+    ${!R.aiUsed && M ? `<p class="note" style="margin:10px 0 0"><b>알림</b> 이번 학습에서는 AI 모델이 검증 기간에 전체 평균을 넘지 못해(${pct(M.topAvg)} vs ${pct(M.baseAvg)}) 추천 목록에서 제외하고, 검증된 매매 신호만 사용했습니다. 모델은 매일 다시 학습하며, 기준을 넘으면 자동으로 다시 포함됩니다.</p>` : ""}
+    <section class="sec"><div class="sec-h"><h2>오늘의 추천</h2><span class="sub">목표가 도달 시 익절 · 손절가 이탈 시 손절 · ${R.horizon}거래일 뒤 정리 · 비용 0.25% 차감</span></div>
+      ${P.length ? `<div class="panel rwrap scroll"><table class="rtable"><thead><tr><th>순위</th><th class="l">종목</th><th>현재가</th><th>기대 수익</th><th>수익 확률</th><th>목표가</th><th>손절가</th><th class="l">출처 · 근거</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="cards">${cards}</div>` : `<div class="panel empty">오늘은 기대 수익이 플러스인 후보가 없습니다. 무리하게 채우지 않았습니다 — 관망을 권합니다.</div>`}
+      <p class="note">기대 수익은 학습에 쓰지 않은 기간에 같은 점수대(또는 같은 신호) 종목이 실제로 낸 거래당 평균 수익입니다. 목표가·손절가는 오늘 종가 기준이며 실제 매수가가 다르면 같은 비율로 조정하세요.</p></section>
     <section class="sec"><div class="sec-h"><h2>추천 실전 성적</h2><span class="sub">매일 상위 10개를 자동 기록하고 실제 시세로 채점합니다</span></div>
       <div class="grid2">
         <div class="panel pad"><div class="controls" style="margin-bottom:8px">${seg("trt", [["open", `진행 중 ${T.open || 0}`], ["closed", `종료 ${T.closed || 0}`]], st.trTab)}</div>
-          <div class="scroll trw"><table class="t"><thead><tr><th class="l">추천일</th><th class="l">종목</th><th>확률</th><th>매수가</th><th>목표가</th><th>손절가</th><th>수익률</th><th>경과</th><th>결과</th></tr></thead>
-            <tbody id="trb"></tbody></table></div></div>
-        <div class="panel pad"><div class="lbl" style="margin-bottom:6px">월별 실전 승률 ${T.monthly?.length ? "" : "· 첫 결과는 추천 후 약 1개월 뒤"}</div>${bars(T.monthly && T.monthly.map(m => [m[0], m[1] * 100, m[2], m[3]]), "월별 실전 승률")}
-          ${T.closed ? `<p class="note" style="margin:6px 0 0">모델이 예상한 평균 확률 ${p1(T.expected * 100)}% · 실제 ${p1(T.win * 100)}% · 최고 ${pct(T.best * 100)} · 최저 ${pct(T.worst * 100)}</p>` : ""}</div>
+          <div class="scroll trw"><table class="t"><thead><tr><th class="l">추천일</th><th class="l">종목</th><th>예상</th><th>매수가</th><th>목표가</th><th>손절가</th><th>수익률</th><th>경과</th><th>결과</th></tr></thead><tbody id="trb"></tbody></table></div></div>
+        <div class="panel pad"><div class="lbl" style="margin-bottom:6px">월별 실전 평균 수익 ${T.monthly?.length ? "" : "· 첫 결과는 추천 후 약 1개월 뒤"}</div>
+          ${vbars(T.monthly && T.monthly.map(m => [m[0], m[1] * 100, m[2], m[3]]), "월별 실전 평균 수익")}
+          ${T.closed ? `<p class="note" style="margin:6px 0 0">승률 ${p1(T.win * 100)}% · 최고 ${pct(T.best * 100)} · 최저 ${pct(T.worst * 100)}</p>` : ""}</div>
       </div></section>
-    <section class="sec"><div class="sec-h"><h2>모델 검증</h2><span class="sub">${R.test[0].replaceAll("-", ".")} ~ ${R.test[1].replaceAll("-", ".")} · 학습에 쓰지 않은 기간</span></div>
+    ${M ? `<section class="sec"><div class="sec-h"><h2>AI 모델 검증</h2><span class="sub">${M.oos[0].replaceAll("-", ".")} ~ ${M.oos[1].replaceAll("-", ".")} · 각 시점 이전 데이터로만 학습</span></div>
       <div class="grid2">
-        <div class="panel pad"><div class="lbl">모델이 말한 확률(가로) vs 실제 승률(세로)</div>${calSvg}<p class="note" style="margin:4px 0 0">점선에 가까울수록 확률을 정직하게 말한다는 뜻입니다.</p></div>
-        <div class="panel pad"><div class="lbl">매일 상위 ${R.topN}개를 추천했다면 · 월별 승률</div>${bars(R.monthly, "월별 검증 승률")}<p class="note" style="margin:4px 0 0">붉은 점선 = 아무 종목이나 샀을 때 평균 승률</p></div>
+        <div class="panel pad"><div class="lbl">모델 점수 10단계별 실제 평균 수익 (왼쪽 낮은 점수, 오른쪽 높은 점수)</div>
+          ${vbars(M.deciles.map((d, i) => [`${i + 1}`, d[1], d[2], d[3]]), "점수 구간별 실제 수익", M.baseAvg)}
+          <p class="note" style="margin:4px 0 0">오른쪽으로 갈수록 막대가 높아지면 모델이 수익 종목을 잘 골라낸다는 뜻입니다. 점선 = 전체 평균.</p></div>
+        <div class="panel pad"><div class="lbl">매일 AI 상위 ${M.topN}개를 샀다면 · 월별 평균 수익</div>
+          ${vbars(M.monthly, "월별 검증 평균 수익", M.baseAvg)}
+          <p class="note" style="margin:4px 0 0">점선 = 같은 달 아무 종목이나 샀을 때 평균 · 상위와 평균 차이 ${edge != null ? `<b class="${cls(edge)}">${pct(edge)}</b>` : "-"}</p></div>
       </div>
-      <p class="note"><b>방법</b> ${R.nStocks}개 종목 × 약 3년 일별 데이터에서 이동평균·RSI·MACD·볼린저·스토캐스틱·ADX·거래량·OBV·52주 고저·상대강도·시장 국면${R.usedFlows ? "·외국인·기관·연기금 순매수" : ""} 등 60여 개 특징을 계산하고, 앞 70% 기간으로 학습해 뒤 30% 기간에서 성능을 확인했습니다. 화면의 확률은 검증 기간에 같은 점수대 종목이 실제로 수익을 낸 비율로 보정한 값입니다.<br>
-      <b>유의</b> 현재 시가총액 1조 원 이상 종목으로 과거를 학습해 생존 편향이 있고, 실적·뉴스 같은 차트 밖 요인은 반영하지 않습니다. 실전 성적이 쌓일수록 숫자의 신뢰도가 올라갑니다.</p>
-      ${AI?.ok ? `<details class="more"><summary>참고: 단일 신호 기법 순위 (조건 조합 ${AI.nTested.toLocaleString()}개 검증)</summary>
-        <div class="panel scroll"><table class="t"><thead><tr><th class="l">기법</th><th>신호 수</th><th>승률</th><th>학습</th><th>검증</th><th>평균 수익</th></tr></thead><tbody>
-        <tr><td class="l flat">기준 · 아무 날 매수</td><td class="num">${AI.baseline.n.toLocaleString()}</td><td class="num">${p1(AI.baseline.win)}%</td><td>-</td><td>-</td><td class="num">${pct(AI.baseline.avg)}</td></tr>
-        ${AI.strategies.map(x => `<tr><td class="l">${esc(x.name)}</td><td class="num">${x.n.toLocaleString()}</td><td class="num"><b>${p1(x.win)}%</b></td><td class="num">${p1(x.winTr)}%</td><td class="num">${p1(x.winTe)}%</td><td class="num ${cls(x.avg)}">${pct(x.avg)}</td></tr>`).join("")}
-        </tbody></table></div></details>` : ""}</section>${foot()}`;
+      <p class="note"><b>방법</b> ${R.nStocks}개 종목 × 약 ${M.years}년 일별 데이터에서 이동평균·RSI·MACD·볼린저·스토캐스틱·ADX·거래량·OBV·52주 고저·상대강도·시장 국면${R.usedFlows ? "·외국인·기관·연기금 순매수" : ""} 등 80여 개 특징과 각 특징의 전 종목 대비 순위를 만들고, 시장 전체 등락을 뺀 상대 수익률을 학습했습니다. 최근 약 3년을 6개월씩 ${M.folds}구간으로 나눠, 각 구간 직전까지의 데이터로만 학습한 모델로 검증했습니다(실제 운영과 같은 조건). 매도 기준은 목표 일평균 변동폭×${M.kt}, 손절 ×${M.ks}이 검증 기간 평균 수익이 가장 높아 선택됐습니다.<br>
+      <b>유의</b> 현재 시가총액 1조 원 이상 종목으로 과거를 학습해 생존 편향이 있고, 실적·뉴스 같은 차트 밖 요인은 반영하지 않습니다. 실전 성적이 쌓일수록 숫자의 신뢰도가 올라갑니다.</p></section>` : ""}
+    ${AI?.ok ? `<section class="sec"><details class="more" open><summary>검증된 매매 신호 (${AI.nTested.toLocaleString()}개 조합 중 학습·검증 기간 모두 기대 수익 플러스)</summary>
+        <div class="panel scroll"><table class="t"><thead><tr><th class="l">신호</th><th>신호 수</th><th>평균 수익</th><th>검증 기간 수익</th><th>승률</th><th>익절·손절(ATR)</th></tr></thead><tbody>
+        <tr><td class="l flat">기준 · 아무 날 매수</td><td class="num">${AI.baseline.n.toLocaleString()}</td><td class="num">${pct(AI.baseline.avg)}</td><td>-</td><td class="num">${p1(AI.baseline.win)}%</td><td>-</td></tr>
+        ${AI.strategies.map(x => `<tr><td class="l">${esc(x.name)}</td><td class="num">${x.n.toLocaleString()}</td><td class="num ${cls(x.avg)}"><b>${pct(x.avg)}</b></td><td class="num ${cls(x.avgTe)}">${x.avgTe != null ? pct(x.avgTe) : "-"}</td><td class="num">${p1(x.win)}%</td><td class="num">${x.kt} · ${x.ks}</td></tr>`).join("")}
+        </tbody></table></div></details></section>` : ""}${foot()}`;
   const drawTr = () => { $("#trb").innerHTML = (st.trTab === "open" ? trRows(T.openRows, true) : trRows(T.closedRows, false)) || `<tr><td colspan="9" class="empty">아직 없습니다.</td></tr>`; bindGo($("#trb")); };
   onSeg($("#main"), "trt", v => { st.trTab = v; drawTr(); });
   drawTr(); bindGo($("#main"));
@@ -777,7 +778,7 @@ function viewWatch() {
   const hit = c => { const a = al[c], p = S.by[c].price; return a && ((a.above && p >= a.above) || (a.below && p <= a.below)); };
   const recOf = c => S.rec?.ok ? S.rec.picks.find(p => p.code === c) : null;
   const wrows = wl.map(c => { const s = S.by[c], r = recOf(c);
-    return `<div class="row" style="cursor:pointer" data-go="${c}"><span class="nm">${esc(s.name)}${hit(c) ? `<span class="alert-on">알림 도달</span>` : ""}${r ? `<span class="alert-on" style="background:var(--c-pen)">AI ${p1(r.prob)}%</span>` : ""}
+    return `<div class="row" style="cursor:pointer" data-go="${c}"><span class="nm">${esc(s.name)}${hit(c) ? `<span class="alert-on">알림 도달</span>` : ""}${r ? `<span class="alert-on" style="background:var(--c-pen)">추천 ${pct(r.exp)}</span>` : ""}
       <small>${c}${al[c] ? ` · 알림 ${al[c].above ? n(al[c].above) + " 이상" : ""}${al[c].above && al[c].below ? " / " : ""}${al[c].below ? n(al[c].below) + " 이하" : ""}` : ""}</small></span>
       <span class="px num">${n(s.price)}</span><span class="ch num ${cls(s.pct)}">${pct(s.pct)}</span><button class="x" data-del="${c}" aria-label="${esc(s.name)} 삭제">×</button></div>`; }).join("");
   let buy = 0, val = 0, day = 0;

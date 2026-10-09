@@ -250,6 +250,8 @@ class Strategy:
     win_te: float
     avg_te: float
     score: float
+    avg_tr: float = 0.0
+    sd: float = 0.0
     kt: float = 2.0
     ks: float = 1.5
     rets: np.ndarray = field(default=None, repr=False)
@@ -280,7 +282,13 @@ def _stats(ev, ret, hit, train_mask):
     return dict(n=n, win=w.mean(), avg=r.mean(), hit=hit[ev].mean(),
                 n_tr=int(tr.sum()), win_tr=w[tr].mean() if tr.any() else 0,
                 n_te=int(te.sum()), win_te=w[te].mean() if te.any() else 0,
-                avg_te=r[te].mean() if te.any() else 0)
+                avg_te=r[te].mean() if te.any() else 0, avg_tr=r[tr].mean() if tr.any() else 0,
+                sd=r.std() if n > 1 else 0)
+
+
+def _lcb(s: dict) -> float:
+    """기대 수익률의 보수적 하한 (표본이 적거나 변동이 크면 낮아짐)."""
+    return s["avg"] - 1.64 * s["sd"] / math.sqrt(max(s["n"], 1))
 
 
 def mine(pn: Panel, cfg: dict) -> ScanResult:
@@ -310,9 +318,9 @@ def mine(pn: Panel, cfg: dict) -> ScanResult:
             s = _stats(ev, ret, hit, train)
             if s["n_tr"] < min_tr or s["n_te"] < min_te:
                 continue
-            if s["avg_te"] <= 0 or s["win_te"] < s["win_tr"] - 0.07:   # 검증 구간에서 무너진 조합 제외
+            if s["avg_te"] <= 0 or s["avg_tr"] <= 0:          # 학습·검증 구간 모두 기대 수익이 플러스여야 채택
                 continue
-            results.append(Strategy(tuple(pn.keys[i] for i in combo), score=_wilson_lb(s["win"], s["n"]), **s))
+            results.append(Strategy(tuple(pn.keys[i] for i in combo), score=_lcb(s), **s))
 
     results.sort(key=lambda s: s.score, reverse=True)
     # 거의 같은 조합(상위 조합을 포함하는 부분집합) 중복 제거
@@ -352,7 +360,7 @@ def mine(pn: Panel, cfg: dict) -> ScanResult:
         for k, v in st.items():
             setattr(s, k, v)
         s.rets = r2[ev]
-        s.score = _wilson_lb(s.win, s.n)
+        s.score = _lcb(st)
     # 매도 기준 재최적화 후 결과가 같아진 조합 제거
     uniq, sigs = [], set()
     for s in top:
@@ -361,8 +369,9 @@ def mine(pn: Panel, cfg: dict) -> ScanResult:
             sigs.add(sig)
             uniq.append(s)
     top = uniq
-    # 표본으로 검증된 상위 기법 안에서는 승률이 높은 순으로 표시
-    top.sort(key=lambda s: (s.win, s.avg), reverse=True)
+    # 기대 수익률(검증 구간) 높은 순
+    top = [s for s in top if s.avg_te > 0 and s.avg_tr > 0]
+    top.sort(key=lambda s: (s.avg_te, s.avg), reverse=True)
 
     picks = recommend(pn, top, sims, cfg)
     d0, d1 = pd.Timestamp(dates[0]), pd.Timestamp(dates[-1])
@@ -419,5 +428,5 @@ def recommend(pn: Panel, strategies: list, sims: dict, cfg: dict) -> list:
         picks.append(Pick(row.Code, row.Name, row.Market, row.Marcap, c, c - pc, (c / pc - 1) * 100,
                           s, rank, ago, c * (1 + s.kt * atrp), c * (1 - s.ks * atrp),
                           len(own), float((r2[own] > 0).mean()) if len(own) else float("nan"), df))
-    picks.sort(key=lambda p: (p.strategy.win, p.strategy.avg), reverse=True)
+    picks.sort(key=lambda p: (p.strategy.avg_te, p.strategy.avg), reverse=True)
     return picks[:cfg.get("recommend_count", 10)]

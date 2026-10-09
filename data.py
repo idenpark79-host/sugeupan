@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 COLS = ["Open", "High", "Low", "Close", "Volume"]
-PERIOD_DAYS = {"3mo": 95, "6mo": 185, "1y": 370, "2y": 740, "3y": 1110}
+PERIOD_DAYS = {"3mo": 95, "6mo": 185, "1y": 370, "2y": 740, "3y": 1110, "5y": 1830, "10y": 3660}
 FDR_ALIAS = {"^KS11": "KS11", "^KQ11": "KQ11", "^GSPC": "US500", "^IXIC": "IXIC", "KRW=X": "USD/KRW"}
 
 

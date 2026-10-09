@@ -2,7 +2,6 @@
   "period": "1y",
   "chart_days": 120,
   "output_dir": "reports",
-
   "indices": {
     "^KS11": "KOSPI",
     "^KQ11": "KOSDAQ",
@@ -10,19 +9,20 @@
     "^IXIC": "NASDAQ",
     "KRW=X": "원/달러 환율"
   },
-
   "watchlist": {
     "005380.KS": "현대차",
     "000270.KS": "기아",
     "005930.KS": "삼성전자",
     "000660.KS": "SK하이닉스"
   },
-
   "scan": {
     "enabled": true,
-    "markets": ["KOSPI", "KOSDAQ"],
+    "markets": [
+      "KOSPI",
+      "KOSDAQ"
+    ],
     "min_marcap": 1000000000000,
-    "history_years": 3,
+    "history_years": 10,
     "horizon_days": 20,
     "cost_pct": 0.25,
     "max_combo": 3,
@@ -34,20 +34,34 @@
     "default_target_atr": 2.0,
     "default_stop_atr": 1.5,
     "exit_grid": {
-      "target_atr": [1.5, 2.0, 2.5, 3.0, 4.0],
-      "stop_atr": [1.0, 1.5, 2.0, 2.5]
+      "target_atr": [
+        1.5,
+        2.0,
+        2.5,
+        3.0,
+        4.0
+      ],
+      "stop_atr": [
+        1.0,
+        1.5,
+        2.0,
+        2.5
+      ]
     }
   },
-
   "signal_params": {
     "rsi_overbought": 70,
     "rsi_oversold": 30,
     "volume_surge_ratio": 2.0,
     "cross_lookback_days": 5
   },
-
   "llm_commentary": {
     "enabled": false,
     "model": "claude-sonnet-5-5"
+  },
+  "site": {
+    "chart_min_marcap": 100000000000.0,
+    "flow_min_marcap": 300000000000.0,
+    "rec_count": 20
   }
 }
