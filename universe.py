@@ -64,9 +64,13 @@ def krx_listing(day: str | None = None) -> pd.DataFrame:
     day = day or stock.get_nearest_business_day_in_a_week()
     rows = []
     for mk in ("KOSPI", "KOSDAQ"):
-        o = stock.get_market_ohlcv(day, market=mk)
-        cap = stock.get_market_cap(day, market=mk)
-        df = o.join(cap[["시가총액"]], how="left")
+        df = stock.get_market_ohlcv(day, market=mk)
+        need = [c for c in ("시가총액", "거래대금") if c not in df.columns]
+        if need:                                          # pykrx 버전에 따라 시세표에 이미 포함됨
+            cap = stock.get_market_cap(day, market=mk)
+            df = df.join(cap[[c for c in need if c in cap.columns]], how="left")
+        if "등락률" not in df.columns:
+            df["등락률"] = 0.0
         df["Market"] = mk
         rows.append(df)
     df = pd.concat(rows)
