@@ -1,5 +1,5 @@
-<title>수급판</title>
-<meta name="description" content="코스피·코스닥 시세, 외국인·기관·연기금 매매동향, 과거 승률 기반 1개월 추천">
+<title>Wake</title>
+<meta name="description" content="Wake — 큰돈의 흐름을 읽다. 외국인·기관·연기금 매매동향과 과거 승률 기반 1개월 추천">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
@@ -40,6 +40,8 @@ h1,h2,h3{margin:0;text-wrap:balance}
 .top-in{max-width:var(--maxw);margin:0 auto;padding-inline:var(--gutter);height:58px;display:flex;align-items:center;gap:22px}
 .brand{font-weight:700;font-size:18px;letter-spacing:-.4px;display:flex;align-items:baseline;gap:8px;white-space:nowrap}
 .brand small{font-weight:500;font-size:11.5px;color:var(--muted);letter-spacing:0}
+.brand .wm{font-weight:700;letter-spacing:-.2px}
+.brand .wm::first-letter{color:var(--accent)}
 .nav{display:flex;gap:4px}
 .nav a{padding:7px 12px;border-radius:8px;color:var(--muted);font-weight:500;white-space:nowrap}
 .nav a[aria-current="page"]{color:var(--ink);background:var(--sunk);font-weight:600}
@@ -209,7 +211,7 @@ footer{color:var(--muted);font-size:12px;margin-top:40px;line-height:1.7}
 
 <header class="top">
   <div class="top-in">
-    <a class="brand" href="#home">수급판 <small id="asof"></small></a>
+    <a class="brand" href="#home"><span class="wm">Wake</span> <small id="asof"></small></a>
     <nav class="nav" aria-label="메뉴">
       <a href="#home" data-r="home">시장</a>
       <a href="#flows" data-r="flows">매매동향</a>
@@ -507,7 +509,7 @@ function drawDaily() {
 async function viewStock(code) {
   const s = S.by[code];
   if (!s) { $("#main").innerHTML = `<div class="panel empty">종목을 찾을 수 없습니다.</div>`; return; }
-  document.title = `${s.name} · 수급판`;
+  document.title = `${s.name} · Wake`;
   const wl = store.get("watch", DEF_WATCH), inW = wl.includes(code);
   $("#main").innerHTML = `${banner()}
     <section class="sh">
