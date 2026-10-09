@@ -1,0 +1,52 @@
+name: 수급판 데이터 갱신·배포
+
+on:
+  schedule:
+    - cron: "41 7 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-site.txt
+      - run: pip install -r requirements-site.txt
+      - name: 데이터 생성
+        env:
+          KRX_ID: ${{ secrets.KRX_ID }}
+          KRX_PW: ${{ secrets.KRX_PW }}
+        run: |
+          if [ -z "$KRX_ID" ]; then
+            echo "KRX_ID 시크릿이 없어 가상 데이터로 생성합니다."
+            python site_build.py --demo
+          else
+            python site_build.py
+          fi
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
