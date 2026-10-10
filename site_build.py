@@ -38,6 +38,7 @@ import indicators
 import model
 import patterns
 import rating
+import shorts
 import themes
 import track
 import strategy
@@ -338,7 +339,7 @@ def _tf_bars(h: pd.DataFrame, long: pd.DataFrame | None):
 
 def build_details(src: Source, lst: pd.DataFrame, detail: list, flowset: set, scan_prices: dict, scan_flows: dict,
                   pstats: dict | None = None, ai_today: dict | None = None, rt: dict | None = None,
-                  long_prices: dict | None = None):
+                  long_prices: dict | None = None, short_ctx: tuple | None = None):
     log("종목 상세", len(detail), "/ 수급", len(flowset))
 
     def get_hist(code):
@@ -393,6 +394,13 @@ def build_details(src: Source, lst: pd.DataFrame, detail: list, flowset: set, sc
             obj["wk"], obj["mo"] = _tf_bars(h, (long_prices or {}).get(code))
         except Exception as e:
             log("주봉·월봉 실패", code, e)
+        if short_ctx and code in short_ctx[0]:
+            try:
+                sa = shorts.analyze(short_ctx[0][code], (long_prices or {}).get(code, h), short_ctx[1].get(code), short_ctx[2])
+                if sa:
+                    obj["short"] = sa
+            except Exception as e:
+                log("공매도 분석 실패", code, e)
         if code in flows:
             f = flows[code].iloc[-130:]
             obj["flow"] = {"dates": f.index.strftime("%Y-%m-%d").tolist(),
@@ -506,7 +514,7 @@ def build_themes(rt: dict | None, lst: pd.DataFrame, metrics: dict):
     dump("themes.json", {"ok": True, "asof": m["asof"], "themes": rows, "market": m["market"][::2] + [m["market"][-1]],
                          "mret": {k: r2(v * 100) for k, v in m["mret"].items()},
                          "val": m["val"], "monthly": m["monthly"], "consist": m["consist"], "dec": m["dec"], "tval": m["tval"],
-                         "oos": m["oos"], "n": m["n"], "cut": m["cut"]})
+                         "oos": m["oos"], "n": m["n"], "cut": m["cut"], "fc": m.get("fc")})
 
 
 def build_patterns(pstats: dict | None):
@@ -527,7 +535,8 @@ def _ai_today(results: dict) -> dict:
     out = {}
     for H, r in results.items():
         for code, (p, e, w) in r.today.items():
-            out.setdefault(code, {})[str(H)] = [round(p * 100, 1), r2(e * 100), r1(w * 100)]
+            b = r.band.get(code)
+            out.setdefault(code, {})[str(H)] = [round(p * 100, 1), r2(e * 100), r1(w * 100)] + ([[r2(x * 100) for x in b]] if b else [])
     return out
 
 
@@ -607,6 +616,7 @@ def build_rec(results: dict, pn, lst, src, pstats: dict, flows: dict, prices: di
                       "folds": r.folds, "years": round(r.years, 1), "nTrain": r.n_train, "nOos": r.n_oos,
                       "oos": [r.oos_period[0].strftime("%Y-%m-%d"), r.oos_period[1].strftime("%Y-%m-%d")],
                       "minWin": r.min_win, "atrCap": r.atr_cap,
+                      "cover": [r1(r.cover[0] * 100), r1(r.cover[1] * 100), r.cover[2], r.cover[3]] if r.cover else None,
                       "styles": {k: [a, b_, r2(c * 100), r1(d * 100), r1(e * 100)] for k, (a, b_, c, d, e) in (r.styles or {}).items()},
                       "exits": [[a, b, r2(c * 100), r1(d * 100), r2(e * 100), r1(f * 100)] for a, b, c, d, e, f in r.exit_table]}}
     dump("rec.json", rec)
@@ -660,7 +670,7 @@ def main():
 
     results, pn, pstats, scan_prices, scan_flows, rt = {}, None, None, {}, {}, None
     sectors_map = src.sectors(lst)
-    ext_prices = {}
+    ext_prices, short_ctx = {}, None
     if not args.no_ai:
         log("학습용 데이터 수집")
         sc = CFG.get("scan", {})
@@ -682,6 +692,19 @@ def main():
                 import traceback
                 traceback.print_exc()
                 log("투자의견 실패", e)
+            log("공매도")
+            try:
+                sample = bool(src.demo or src.sample_flow)
+                scodes = [c for c in lst[lst.Marcap >= SITE["flow_min_marcap"]].Code if c in ext_prices]
+                shares = {c: m / p for c, m, p in zip(lst.Code, lst.Marcap, lst.Close) if p and p > 0}
+                sdata = shorts.fetch(scodes, ext_prices, sample, shares, log=log)
+                sst = shorts.study(sdata, ext_prices, shares, log=log)
+                dump("short.json", {**sst, "sample": sample})
+                short_ctx = (sdata, shares, kospi["Close"])
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                log("공매도 실패", e)
             log("기대 수익률 모델 (1주·1개월 워크포워드 학습)")
             results = model.run(pn, sc, kospi["Close"], log=log)
             log("포트폴리오 백테스트")
@@ -706,7 +729,9 @@ def main():
                 | {p["code"] for r in results.values() for p in r.picks})
         detail = [c for c in detail if c in keep]
     flowset = set(lst[lst.Marcap >= SITE["flow_min_marcap"]].Code)
-    metrics, views = build_details(src, lst, detail, flowset, scan_prices, scan_flows, pstats, ai_today, rt, ext_prices)
+    if not (OUT / "short.json").exists():
+        dump("short.json", {"ok": False})
+    metrics, views = build_details(src, lst, detail, flowset, scan_prices, scan_flows, pstats, ai_today, rt, ext_prices, short_ctx)
     del ext_prices
     have = {p.stem for p in (OUT / "s").glob("*.json")}
     have_flow = {c for c in have if c in flowset}

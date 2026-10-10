@@ -176,6 +176,23 @@ def build(prices: dict, cap: dict, names: dict, krx: dict | None = None, log=pri
     monthly = [[m, round(float(r.get(2, np.nan)) * 100, 2), round(float(r.get(-2, np.nan)) * 100, 2)] for m, r in mon.iterrows()]
     consist = float(((mon.get(2) - mon.get(-2)) > 0).mean()) if 2 in mon and -2 in mon else None
     dec = V2.groupby(pd.cut(V2.pct, np.linspace(0, 1, 11), include_lowest=True), observed=True).y.mean()
+    # ── 1개월 예상 범위: 점수 10분위별 실제 1개월 수익률 분포(60일 변동성 단위) — 앞 2/3로 만든 범위를 뒤 1/3에서 검증 ──
+    vol60 = ret.rolling(60, min_periods=40).std().clip(0.005, 0.08)
+    V2["z"] = V2.raw / vol60.values[V2.d.values, V2.c.values]
+    V3 = V2[np.isfinite(V2.z)]
+    QS = [.1, .25, .5, .75, .9]
+    kk, zz, dd = np.minimum((V3.pct.values * 10).astype(int), 9), V3.z.values, V3.d.values
+    qt = lambda m: np.array([np.quantile(zz[m & (kk == k)], QS) if (m & (kk == k)).sum() > 200 else np.quantile(zz[m], QS) for k in range(10)])
+    ud = np.unique(dd)
+    cutd = ud[int(len(ud) * 2 / 3)]
+    late = dd >= cutd
+    q1 = qt(~late)
+    fcv = {"H": H, "c80": round(float(((zz >= q1[kk, 0]) & (zz <= q1[kk, 4]))[late].mean()) * 100, 1),
+           "c50": round(float(((zz >= q1[kk, 1]) & (zz <= q1[kk, 3]))[late].mean()) * 100, 1),
+           "up": round(float((zz > q1[kk, 2])[late].mean()) * 100, 1), "n": int(late.sum()),
+           "from": str(pd.Timestamp(dates[cutd]).date()), "to": str(pd.Timestamp(dates[int(ud[-1])]).date())}
+    QT = qt(np.ones(len(zz), bool))
+    log(f"    1개월 예상 범위 검증: 80% 범위 적중 {fcv['c80']}% · 50% 범위 적중 {fcv['c50']}% ({fcv['n']:,}건)")
     log("    투자의견 검증(다음 1개월 시장 대비): " + " · ".join(f"{LV[int(k)]} {v[0]:+.2f}%p" for k, v in val.items()))
 
     # 주도섹터 검증: 매주 순위 상위 3 / 하위 3 섹터의 다음 1개월 시장 대비
@@ -277,8 +294,11 @@ def build(prices: dict, cap: dict, names: dict, krx: dict | None = None, log=pri
                      "r3m": round(float(vals["r60"].get(code, np.nan)) * 100, 2) if np.isfinite(vals["r60"].get(code, np.nan)) else None,
                      "tRank": tnow[t]["rank"] if t in tnow else None, "hist": hist.get(code, [])[-12:],
                      "val": val[str(lv)][:2]}
+        v_ = vol60[code].iloc[t_last]
+        if np.isfinite(v_):
+            out[code]["fc"] = [round(float(x * v_) * 100, 2) for x in QT[min(int(p_ * 10), 9)]]
     meta = {"asof": str(pd.Timestamp(dates[-1]).date()), "n": len(out), "oos": [str(pd.Timestamp(dates[starts[0]]).date()), str(pd.Timestamp(dates[-1]).date())],
-            "val": val, "monthly": monthly[-36:], "consist": round(consist * 100, 1) if consist is not None else None,
+            "val": val, "fc": fcv, "monthly": monthly[-36:], "consist": round(consist * 100, 1) if consist is not None else None,
             "dec": [round(float(v) * 100, 2) for v in dec.values], "tval": tval, "cut": CUT,
             "market": [[str(pd.Timestamp(d_).date()), round(float(v / mser.iloc[0]), 4)] for d_, v in mser.items()],
             "mret": {"r1d": float(midx.pct_change().iloc[-1]), "r1w": float(midx.pct_change(5).iloc[-1]),

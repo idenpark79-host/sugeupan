@@ -56,6 +56,8 @@ class HorizonResult:
     regime_ok: bool = True                                  # 오늘 시장 국면
     regime_days: np.ndarray = field(default=None, repr=False)   # 날짜별 국면 (np.unique(date) 순서)
     off: tuple = None                                       # 국면 나쁠 때 상위 종목 성적 (평균, 승률)
+    band: dict = field(default_factory=dict, repr=False)    # 코드 → 보유 기간 수익률 분위 [10, 25, 50, 75, 90%]
+    cover: tuple = None                                     # 예측 범위 검증 (10~90% 범위 안 비율, 중앙값 위 비율, 검증 건수, 시작일)
     styles: dict = field(default_factory=dict)              # 매도 전략별 {이름: (목표배수, 손절배수, 상위 평균, 승률, 목표 도달률)}
 
 
@@ -372,6 +374,21 @@ def run_horizon(pn, X, fnames, H, cfg, regime, top_n=20, log=print) -> HorizonRe
         off = (float(ret[toff].mean()), float((ret[toff] > 0).mean()))
     calib = [(a, b, float(np.mean(ret[om][(pct[om] >= a) & ((pct[om] < b) if b < 1 else True)])),
               float(np.mean(ret[om][(pct[om] >= a) & ((pct[om] < b) if b < 1 else True)] > 0)), n) for a, b, n in rows]
+    # 예상 범위 — 점수 10분위별 실제 보유 수익률 분포(변동폭 단위). 앞 2/3 기간으로 만든 범위를 뒤 1/3 기간에 맞춰 검증
+    QS = [.1, .25, .5, .75, .9]
+    yv = y / ac
+    bm = oos & np.isfinite(yv) & np.isfinite(pct)
+    dec = np.minimum((np.nan_to_num(pct) * 10).astype(int), 9)
+    qtab_of = lambda m: np.array([np.quantile(yv[m & (dec == k)], QS) if (m & (dec == k)).sum() > 200 else np.quantile(yv[m], QS)
+                                  for k in range(10)])
+    ud = np.unique(pn.date[bm])
+    cut = ud[int(len(ud) * 2 / 3)]
+    late = bm & (pn.date >= cut)
+    qt = qtab_of(bm & (pn.date < cut))
+    cover = (float(((yv >= qt[dec, 0]) & (yv <= qt[dec, 4]))[late].mean()), float((yv > qt[dec, 2])[late].mean()),
+             int(late.sum()), pd.Timestamp(cut).strftime("%Y-%m-%d"))
+    qtab = qtab_of(bm)
+    log(f"    [{HZ[H]}] 예상 범위 검증: 10~90% 범위 적중 {cover[0] * 100:.1f}% · 중앙값 상회 {cover[1] * 100:.1f}% ({cover[2]:,}건)")
     grades = {}
     for g_, a in (("S", 0.98), ("A", 0.95), ("B", 0.90)):
         m = om & (pct >= a)
@@ -423,7 +440,7 @@ def run_horizon(pn, X, fnames, H, cfg, regime, top_n=20, log=print) -> HorizonRe
     tp = pd.Series(raw).rank(pct=True).values
     fi = {f: fnames.index(f) for f, *_ in FACTORS if f in fnames}
     Zt = {f: pd.Series(X[today, c]).rank(pct=True).values for f, c in fi.items()}
-    todays = {}
+    todays, bands = {}, {}
     picks = []
     for j in np.argsort(-tp):
         i = today[j]
@@ -431,6 +448,7 @@ def run_horizon(pn, X, fnames, H, cfg, regime, top_n=20, log=print) -> HorizonRe
         atrp = float(min(pn.atrp[i], cap))
         e, w = float(use_e(tp[j], atrp)[0]), float(use_w(tp[j], atrp)[0])
         todays[code] = (float(tp[j]), e, w)
+        bands[code] = (qtab[min(int(tp[j] * 10), 9)] * max(atrp, 0.005)).tolist()
         if len(picks) >= top_n or e <= 0:
             continue
         row = pn.meta.iloc[pn.sid[i]]
@@ -453,7 +471,7 @@ def run_horizon(pn, X, fnames, H, cfg, regime, top_n=20, log=print) -> HorizonRe
         base=(float(ret[base_m].mean()), float((ret[base_m] > 0).mean())),
         top=(float(ret[ti].mean()), float((ret[ti] > 0).mean()), float(hit[ti].mean())),
         top_n=top_n, ic=ic, oos_period=(pd.Timestamp(od.min()), pd.Timestamp(od.max())), folds=len(starts),
-        years=years, n_train=len(iall), n_oos=int(om.sum()), pct=pct, exp_of=exp_of, win_of=win_of, today=todays,
+        years=years, n_train=len(iall), n_oos=int(om.sum()), pct=pct, exp_of=exp_of, win_of=win_of, today=todays, band=bands, cover=cover,
         gate=gate, regime_ok=reg_today, regime_days=regime_days, off=off, styles=styles)
 
 
