@@ -37,6 +37,8 @@ import data as rawdata
 import indicators
 import model
 import patterns
+import rating
+import themes
 import track
 import strategy
 import universe
@@ -64,10 +66,25 @@ def r2(x):
     return None if x is None or x != x else round(float(x), 2)
 
 
+def _clean(o):
+    """JSON에 못 넣는 값(NaN·무한대) → null."""
+    if isinstance(o, float):
+        return o if o == o and o not in (float("inf"), float("-inf")) else None
+    if isinstance(o, dict):
+        return {k: _clean(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_clean(v) for v in o]
+    return o
+
+
 def dump(name, obj):
     p = OUT / name
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(obj, ensure_ascii=False, separators=(",", ":"), allow_nan=False), encoding="utf-8")
+    try:
+        s = json.dumps(obj, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    except ValueError:
+        s = json.dumps(_clean(obj), ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    p.write_text(s, encoding="utf-8")
 
 
 def pmap(fn, items, workers, label):
@@ -248,14 +265,18 @@ def build_market(src: Source, lst: pd.DataFrame):
 
 
 def build_listing(lst: pd.DataFrame, detail: set, flowset: set, metrics: dict, sectors: dict,
-                  views: dict | None = None, ai_today: dict | None = None):
+                  views: dict | None = None, ai_today: dict | None = None, rt: dict | None = None):
     log("종목 목록", len(lst))
     rows = []
     views, ai_today = views or {}, ai_today or {}
-    TONE = {"강세": 1, "중립": 0, "약세": -1}
+    TONE = {"상승": 1, "중립": 0, "하락": -1, "긍정적": 1, "부정적": -1, "강세": 1, "약세": -1}
     for r in lst.itertuples():
         mt = metrics.get(r.Code, {})
         vw, ai = views.get(r.Code), ai_today.get(r.Code, {})
+        op = (rt or {}).get("ops", {}).get(r.Code)
+        if op and not mt:
+            mt = {"r1m": op.get("r1m"), "r3m": op.get("r3m")}
+        th = ((rt or {}).get("theme_of") or {}).get(r.Code) or themes.theme_of(r.Code, r.Name, sectors.get(r.Code))
         rows.append([r.Code, r.Name, "P" if r.Market == "KOSPI" else "Q", r2(r.Close), r2(r.Change), r2(r.ChangePct),
                      int(r.Volume or 0), r1(r.Amount / 1e8), r1(r.Marcap / 1e8),
                      r2(getattr(r, "PER", None)), r2(getattr(r, "PBR", None)), r2(getattr(r, "DIV", None)),
@@ -264,10 +285,11 @@ def build_listing(lst: pd.DataFrame, detail: set, flowset: set, metrics: dict, s
                     + [(int(mt[k]) if k in ("align", "nh", "nl") or k.endswith("S") else r2(mt[k]))
                        if mt.get(k) is not None and mt.get(k) == mt.get(k) else None for k in MET_FIELDS]
                     + [TONE.get(vw["tone"]) if vw else None, vw["head"] if vw else None,
-                       ai["20"][0] if "20" in ai else None, ai["5"][0] if "5" in ai else None])
+                       ai["20"][0] if "20" in ai else None, ai["5"][0] if "5" in ai else None,
+                       (vw or {}).get("sg") or None, op["lv"] if op else None, op["score"] if op else None, th])
     dump("stocks.json", {"fields": ["code", "name", "mkt", "price", "chg", "pct", "vol", "amt", "cap", "per", "pbr",
                                     "div", "frg", "has", "open", "high", "low", "sector"] + MET_FIELDS
-                         + ["tone", "head", "ai20", "ai5"], "rows": rows})
+                         + ["tone", "head", "ai20", "ai5", "sg", "op", "opS", "th"], "rows": rows})
 
 
 def build_ranks(src: Source, lst: pd.DataFrame, kospi_dates):
@@ -297,8 +319,26 @@ def build_ranks(src: Source, lst: pd.DataFrame, kospi_dates):
     dump("rank.json", out)
 
 
+def _tf_bars(h: pd.DataFrame, long: pd.DataFrame | None):
+    """주봉(최근 5년)·월봉(전체) — 장기 시세가 있으면 그것으로, 최근분은 일봉으로 이어 붙임."""
+    L = h
+    if long is not None and len(long) > len(h):
+        long = long[long.Close > 0]
+        L = pd.concat([long, h[h.index > long.index[-1]]])[["Open", "High", "Low", "Close", "Volume"]]
+    L = L.assign(Open=L.Open.where(L.Open > 0, L.Close), High=L.High.where(L.High > 0, L.Close),
+                 Low=L.Low.where(L.Low > 0, L.Close))
+    out = []
+    for rule, n in (("W", 260), ("M", 999)):
+        a = L.assign(t=L.index).groupby(L.index.to_period(rule)).agg(
+            t=("t", "first"), o=("Open", "first"), h=("High", "max"), l=("Low", "min"), c=("Close", "last"), v=("Volume", "sum"))
+        out.append([[t.strftime("%Y-%m-%d"), r2(o), r2(hi), r2(lo), r2(c), int(v)]
+                    for t, o, hi, lo, c, v in a.iloc[-n:].itertuples(index=False)])
+    return out
+
+
 def build_details(src: Source, lst: pd.DataFrame, detail: list, flowset: set, scan_prices: dict, scan_flows: dict,
-                  pstats: dict | None = None, ai_today: dict | None = None):
+                  pstats: dict | None = None, ai_today: dict | None = None, rt: dict | None = None,
+                  long_prices: dict | None = None):
     log("종목 상세", len(detail), "/ 수급", len(flowset))
 
     def get_hist(code):
@@ -327,8 +367,14 @@ def build_details(src: Source, lst: pd.DataFrame, detail: list, flowset: set, sc
             continue
         d = indicators.add_indicators(h)
         metrics[code] = _metrics(d, flows.get(code))
+        sigs = None
         try:
-            vw = commentary.view(d, pstats, flows.get(code))
+            fl = patterns.flags(d)
+            on = patterns.onsets(fl).iloc[-120:]
+            rr, kk = np.nonzero(on.values)
+            sigs = [[on.index[i].strftime("%Y-%m-%d"), patterns.KEYS[j]] for i, j in zip(rr, kk)]
+            vw = commentary.view(d, pstats, flows.get(code), fl)
+            vw["sg"] = sorted({int(j) for j in np.flatnonzero(patterns.onsets(fl).iloc[-3:].values.any(axis=0))})   # 최근 3일 신호 (KEYS 순번)
             views[code] = vw
         except Exception as e:
             vw = None
@@ -343,14 +389,22 @@ def build_details(src: Source, lst: pd.DataFrame, detail: list, flowset: set, sc
                            "signals": [[n, s] for n, s in res.signals]}
         except Exception:
             pass
+        try:
+            obj["wk"], obj["mo"] = _tf_bars(h, (long_prices or {}).get(code))
+        except Exception as e:
+            log("주봉·월봉 실패", code, e)
         if code in flows:
             f = flows[code].iloc[-130:]
             obj["flow"] = {"dates": f.index.strftime("%Y-%m-%d").tolist(),
                            **{i: [r2(v / 1e8) for v in f[i]] for i in INV4}}
         if vw:
             obj["view"] = vw
+        if sigs:
+            obj["sigs"] = sigs
         if code in ai_today:
             obj["ai"] = ai_today[code]
+        if rt and code in rt["ops"]:
+            obj["op"] = rt["ops"][code]
         dump(f"s/{code}.json", obj)
     return metrics, views
 
@@ -402,14 +456,70 @@ def write_index():
         '</head><body>' + body + '</body></html>', encoding="utf-8")
 
 
+def signal_stats(src, lst, sc, pn, scan_prices, years):
+    """신호 통계는 추천 모델보다 넓은 종목(기본 시가총액 1,000억 원 이상)으로 계산 — 대형·중형·중소형 구간별."""
+    cap = lst.set_index("Code").Marcap
+    u = lst[(lst.Marcap >= sc.get("stats_min_marcap", 1e11)) & lst.Code.str.endswith("0") & ~lst.Name.str.contains("스팩|리츠")]
+    codes = u.sort_values("Marcap", ascending=False).Code.tolist()
+    extra = [c for c in codes if c not in scan_prices]
+    log(f"    통계 대상 {len(codes)}종목 (추가 시세 {len(extra)}종목)")
+    more = src.scan_prices(extra, years) if extra else {}
+    seg = {c: "L" if cap.get(c, 0) >= 1e12 else "M" if cap.get(c, 0) >= 3e11 else "S" for c in codes}
+
+    def frames():
+        for c in codes:
+            d = pn.frames.get(c) if pn is not None else None
+            if d is None:
+                d = more.get(c)
+                if d is not None:
+                    d = d[["Open", "High", "Low", "Close", "Volume"]]
+            if d is not None:
+                yield c, d
+    st = patterns.stats(frames(), seg=seg, log=log, workers=min(4, os.cpu_count() or 1))
+    m = st.get("_meta", {})
+    log(f"    {m.get('stocks', 0)}종목 · 신호 {m.get('signals', 0)}종 · 발생 {m.get('events', 0):,}건")
+    ext = {c: (scan_prices.get(c) if c in scan_prices else more.get(c)) for c in codes}
+    return st, {c: d[["Open", "High", "Low", "Close", "Volume"]] for c, d in ext.items() if d is not None}
+
+
+def build_themes(rt: dict | None, lst: pd.DataFrame, metrics: dict):
+    """섹터·테마 동향 — 주도섹터 순위, 대장주, 수급, 투자의견 분포."""
+    if not rt:
+        dump("themes.json", {"ok": False})
+        return
+    names = dict(zip(lst.Code, lst.Name))
+    ops = rt["ops"]
+    rows = []
+    for t, x in sorted(rt["themes"].items(), key=lambda z: z[1]["rank"]):
+        mem = x["members"]
+        dist = [sum(1 for c in mem if ops.get(c, {}).get("lv") == lv) for lv in (2, 1, 0, -1, -2)]
+        fl = {k: sum((metrics.get(c) or {}).get(k) or 0 for c in mem) for k in ("frg5", "inst5")}
+        has_fl = any((metrics.get(c) or {}).get("frg5") is not None for c in mem)
+        rows.append({"name": t, "rank": x["rank"], "rank1w": x["rank1w"], "rank1m": x["rank1m"], "n": x["n"], "cap": r1(x["cap"] / 1e8),
+                     **{k: r2(x[k] * 100) for k in ("r1d", "r1w", "r1m", "r3m", "r6m", "r1y", "rel1m", "rel3m", "br20", "br60", "hi", "amtShare")},
+                     "amt": r2(x["amt"]), "score": r1(x["score"] * 100), "dist": dist,
+                     "flow": {k: r1(v) for k, v in fl.items()} if has_fl else None,
+                     "lead": [[c, names.get(c, c)] for c in x["lead"]], "members": mem,
+                     "series": x["series"][::2] + ([x["series"][-1]] if len(x["series"]) % 2 == 0 else []), "rankHist": x["scoreHist"]})
+    dump("ops.json", {c: [o["lv"], o["score"], o["why"][:2]] for c, o in ops.items()})
+    m = rt["meta"]
+    dump("themes.json", {"ok": True, "asof": m["asof"], "themes": rows, "market": m["market"][::2] + [m["market"][-1]],
+                         "mret": {k: r2(v * 100) for k, v in m["mret"].items()},
+                         "val": m["val"], "monthly": m["monthly"], "consist": m["consist"], "dec": m["dec"], "tval": m["tval"],
+                         "oos": m["oos"], "n": m["n"], "cut": m["cut"]})
+
+
 def build_patterns(pstats: dict | None):
     """차트 패턴 성적표 — 패턴 뒤 1주·1개월 실제 성과 (전 종목 · 10년)."""
     if not pstats:
         dump("patterns.json", {"ok": False})
         return
-    rows = [[k, n, b, d, pstats.get(k, {}).get("n", 0), pstats.get(k, {}).get("5"), pstats.get(k, {}).get("20")]
-            for k, n, b, d in patterns.PATTERNS]
-    dump("patterns.json", {"ok": True, "base": pstats.get("_base"), "rows": rows})
+    rows = []
+    for k, n, b, d in patterns.PATTERNS:
+        e = pstats.get(k, {})
+        sg = {g: [x.get("n", 0), x.get("5"), x.get("20")] for g, x in (e.get("seg") or {}).items()}
+        rows.append([k, n, b, d, e.get("n", 0), e.get("5"), e.get("20"), patterns.CAT.get(k, ""), sg])
+    dump("patterns.json", {"ok": True, "base": pstats.get("_base"), "meta": pstats.get("_meta"), "segs": patterns.SEG, "rows": rows})
 
 
 def _ai_today(results: dict) -> dict:
@@ -429,12 +539,31 @@ def _why(p, vw, H):
         for x in vw.get("pats", []):
             st = x[j]
             if x[3] > 0 and st and st[1] is not None and st[1] >= 0.3 and st[3] >= 300:
-                why.append(f"{x[1]} · 과거 {model.HZ.get(H, '')} 시장 대비 {st[1]:+.1f}%p")
+                why.append(f"{x[1]} 신호 · 과거 {model.HZ.get(H, '')} 초과수익 {st[1]:+.1f}%p")
                 if len(why) >= 2:
                     break
     if len(why) < 2:
-        why.append(f"하루 평균 변동 {p['atrp'] * 100:.1f}% · 목표 도달 여유")
+        why.append(f"일평균 변동폭 {p['atrp'] * 100:.1f}% · 목표가 도달 여력")
     return why[:3]
+
+
+def sync_rec_views(views: dict, rt: dict | None = None):
+    """추천 목록의 기술적 의견을 종목 화면과 같은 데이터(수급 포함)로 맞춤."""
+    p = OUT / "rec.json"
+    if not p.exists() or not views:
+        return
+    rec = json.loads(p.read_text(encoding="utf-8"))
+    if not rec.get("ok"):
+        return
+    for h in rec.get("h", {}).values():
+        for pk in h.get("picks", []):
+            vw = views.get(pk["code"])
+            if vw:
+                pk["view"] = commentary.lite(vw)
+            op = (rt or {}).get("ops", {}).get(pk["code"])
+            if op:
+                pk["op"] = {k: op[k] for k in ("lv", "lab", "score", "theme")}
+    dump("rec.json", rec)
 
 
 def build_rec(results: dict, pn, lst, src, pstats: dict, flows: dict, prices: dict, demo: bool):
@@ -463,7 +592,7 @@ def build_rec(results: dict, pn, lst, src, pstats: dict, flows: dict, prices: di
                           "pct": r2(p["pct"]), "exp": r2(p["exp"] * 100), "prob": r1(p["prob"] * 100), "grade": p["grade"],
                           "score": r1(p["score"] * 100), "target": round(p["target"]), "stop": round(p["stop"]),
                           "tgtPct": r2((p["target"] / c - 1) * 100), "stpPct": r2((p["stop"] / c - 1) * 100),
-                          "atr": r2(p["atrp"] * 100), "why": _why(p, vw, H), "view": vw, "type": ps,
+                          "atr": r2(p["atrp"] * 100), "why": _why(p, vw, H), "view": commentary.lite(vw), "type": ps,
                           "st": {k: [r2((x["target"] / c - 1) * 100), r2((x["stop"] / c - 1) * 100), round(x["target"]), round(x["stop"]),
                                      r1(x["prob"] * 100), r2(x["exp"] * 100)] for k, x in p.get("styles", {}).items()}})
         g = {k: [r2(v[0] * 100), r1(v[1] * 100), v[2]] for k, v in r.grades.items()}
@@ -529,7 +658,9 @@ def main():
     kd = build_market(src, lst)
     build_ranks(src, lst, kd)
 
-    results, pn, pstats, scan_prices, scan_flows = {}, None, None, {}, {}
+    results, pn, pstats, scan_prices, scan_flows, rt = {}, None, None, {}, {}, None
+    sectors_map = src.sectors(lst)
+    ext_prices = {}
     if not args.no_ai:
         log("학습용 데이터 수집")
         sc = CFG.get("scan", {})
@@ -542,8 +673,15 @@ def main():
             scan_flows = src.scan_flows(scan_prices, years)
             kospi = src.kospi(years)
             pn = strategy.build_panel(scan_prices, u, kospi["Close"], scan_flows)
-            log("차트 패턴 통계")
-            pstats = patterns.stats(pn.frames)
+            log("기술적 신호 통계")
+            pstats, ext_prices = signal_stats(src, lst, sc, pn, scan_prices, years)
+            log("섹터 동향·투자의견")
+            try:
+                rt = rating.build(ext_prices, dict(zip(lst.Code, lst.Marcap)), dict(zip(lst.Code, lst.Name)), sectors_map, log=log)
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                log("투자의견 실패", e)
             log("기대 수익률 모델 (1주·1개월 워크포워드 학습)")
             results = model.run(pn, sc, kospi["Close"], log=log)
             log("포트폴리오 백테스트")
@@ -568,10 +706,19 @@ def main():
                 | {p["code"] for r in results.values() for p in r.picks})
         detail = [c for c in detail if c in keep]
     flowset = set(lst[lst.Marcap >= SITE["flow_min_marcap"]].Code)
-    metrics, views = build_details(src, lst, detail, flowset, scan_prices, scan_flows, pstats, ai_today)
+    metrics, views = build_details(src, lst, detail, flowset, scan_prices, scan_flows, pstats, ai_today, rt, ext_prices)
+    del ext_prices
     have = {p.stem for p in (OUT / "s").glob("*.json")}
     have_flow = {c for c in have if c in flowset}
-    build_listing(lst, have, have_flow, metrics, src.sectors(lst), views, ai_today)
+    build_listing(lst, have, have_flow, metrics, sectors_map, views, ai_today, rt)
+    try:
+        build_themes(rt, lst, metrics)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        log("섹터 동향 실패", e)
+        dump("themes.json", {"ok": False})
+    sync_rec_views(views, rt)
     now = datetime.now(KST)
     dump("meta.json", {"updated": now.strftime("%Y-%m-%d %H:%M"), "asof": pd.Timestamp(src.day).strftime("%Y-%m-%d"),
                        "demo": args.demo, "sampleFlow": bool(src.sample_flow)})

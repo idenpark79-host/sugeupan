@@ -197,46 +197,46 @@ def _surrogate(X, fnames, pct, mask, date):
 
 
 def _say(f, v, z):
-    """요인 값 → 짧은 문장. 값이 애매하면 None (설명에서 뺌)."""
-    p = lambda x: f"{x * 100:+.0f}%"
+    """요인 값 → 선정 사유 한 줄. 값이 애매하면 None."""
+    p = lambda x: f"{x * 100:+.0f}%".replace("-", "−")
     if f == "ret5":
-        return (f"1주 {p(v)} 급락 · 단기 반등 여지" if v <= -0.08 else f"1주 {p(v)} 조정" if v <= -0.03 else
-                f"1주 {p(v)} 급등 탄력" if v >= 0.08 else f"1주 {p(v)} 상승" if v >= 0.03 else None)
+        return (f"1주 {p(v)} 단기 급락 · 기술적 반등 기대" if v <= -0.08 else f"1주 {p(v)} 조정" if v <= -0.03 else
+                f"1주 {p(v)} 단기 강세" if v >= 0.08 else f"1주 {p(v)} 상승" if v >= 0.03 else None)
     if f == "ret20":
-        return (f"1개월 {p(v)} 급락 · 가격 부담 완화" if v <= -0.15 else f"1개월 {p(v)} 조정" if v <= -0.05 else
-                f"1개월 {p(v)} 상승 흐름" if v >= 0.08 else None)
+        return (f"1개월 {p(v)} 낙폭과대 · 가격 메리트 부각" if v <= -0.15 else f"1개월 {p(v)} 조정" if v <= -0.05 else
+                f"1개월 {p(v)} 상승 추세" if v >= 0.08 else None)
     if f == "ret120":
-        return f"6개월 {p(v)} 소외 · 순환매 후보" if v <= -0.25 else f"6개월 {p(v)} 상대강도 상위" if v >= 0.3 else None
+        return f"6개월 {p(v)} 소외 · 순환매 기대" if v <= -0.25 else f"6개월 {p(v)} 주도주 흐름" if v >= 0.3 else None
     if f == "hi52":
-        return f"52주 고점 대비 {p(v)} · 깊은 조정" if v <= -0.4 else f"52주 고점 근접 ({p(v)})" if v >= -0.05 else None
+        return f"52주 고점 대비 {p(v)} · 저가 매력" if v <= -0.4 else f"52주 고점 근접({p(v)})" if v >= -0.05 else None
     if f == "rsi":
-        return f"RSI {v:.0f} 과매도" if v <= 35 else f"RSI {v:.0f} 강세" if v >= 65 else None
+        return f"RSI {v:.0f} 과매도권" if v <= 35 else f"RSI {v:.0f} 강세권" if v >= 65 else None
     if f == "d_ma20":
-        return f"20일선 아래 {p(v)} · 평균 회귀 여지" if v <= -0.05 else f"20일선 위 {p(v)} · 추세 유지" if v >= 0.05 else None
+        return f"20일선 이격 {p(v)} · 평균회귀 기대" if v <= -0.05 else f"20일선 이격 {p(v)} · 추세 유지" if v >= 0.05 else None
     if f == "vol_r":
-        return f"거래량 평소 {v:.1f}배 · 매도세 진정" if v <= 0.7 else f"거래량 평소 {v:.1f}배 · 관심 유입" if v >= 1.8 else None
+        return f"거래량 평균의 {v:.1f}배 · 매물 소화 진행" if v <= 0.7 else f"거래량 평균의 {v:.1f}배 · 수급 유입" if v >= 1.8 else None
     if f in ("frg5", "inst5", "pen5"):
         who = {"frg5": "외국인", "inst5": "기관", "pen5": "연기금"}[f]
         return f"{who} 5일 순매수 상위" if z >= 0.85 and v > 0 else None
     if f == "obv_z":
-        return "OBV 상승 · 매집 흐름" if z >= 0.85 else None
+        return "OBV 상승 · 매집 흔적" if z >= 0.85 else None
     if f == "d_ma60":
-        return f"60일선 아래 {p(v)} · 중기 낙폭 과대" if v <= -0.1 else f"60일선 위 {p(v)} · 중기 추세 우위" if v >= 0.1 else None
+        return f"60일선 이격 {p(v)} · 중기 낙폭과대" if v <= -0.1 else f"60일선 이격 {p(v)} · 중기 추세 우위" if v >= 0.1 else None
     if f == "ret60":
-        return f"3개월 {p(v)} 하락 · 가격 매력" if v <= -0.2 else f"3개월 {p(v)} 상승 · 주도주 흐름" if v >= 0.25 else None
+        return f"3개월 {p(v)} 하락 · 가격 메리트" if v <= -0.2 else f"3개월 {p(v)} 상승 · 주도주 흐름" if v >= 0.25 else None
     if f == "max20":
-        return f"최근 하루 {p(v)} 급등 이력 · 시장 관심" if v >= 0.12 else None
+        return f"최근 일간 {p(v)} 급등 이력 · 시장 관심 유효" if v >= 0.12 else None
     if f == "beta60":
-        return f"시장 민감도 높음 (베타 {v:.1f}) · 반등장 탄력" if v >= 1.4 else f"시장 영향 적음 (베타 {v:.1f})" if v <= 0.6 else None
+        return f"베타 {v:.1f} · 시장 반등 시 탄력" if v >= 1.4 else f"베타 {v:.1f} · 방어적 성격" if v <= 0.6 else None
     if f == "sto_k":
-        return f"스토캐스틱 {v:.0f} 바닥권" if v <= 20 else f"스토캐스틱 {v:.0f} 강세" if v >= 80 else None
+        return f"스토캐스틱 {v:.0f} 바닥권" if v <= 20 else f"스토캐스틱 {v:.0f} 강세권" if v >= 80 else None
     if f == "up_days20":
         k = round(v * 20)
-        return f"20일 중 {20 - k}일 하락 · 매도 소진" if v <= 0.35 else f"20일 중 {k}일 상승 · 꾸준한 매수" if v >= 0.65 else None
+        return f"20일 중 {20 - k}일 하락 · 매도 소진 국면" if v <= 0.35 else f"20일 중 {k}일 상승 · 꾸준한 매수세" if v >= 0.65 else None
     if f == "lo52":
-        return f"52주 저점 부근 ({p(v)})" if v <= 0.1 else None
+        return f"52주 저점 부근({p(v)})" if v <= 0.1 else None
     if f == "bb_pos":
-        return "볼린저 상단 돌파 시도" if v >= 0.95 else "볼린저 하단 · 반등 구간" if v <= 0.1 else None
+        return "볼린저밴드 상단 돌파 시도" if v >= 0.95 else "볼린저밴드 하단 · 반등 구간" if v <= 0.1 else None
     return None
 
 

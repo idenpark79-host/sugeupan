@@ -85,7 +85,8 @@
     "picks": 20,
     "regime_gate": true
    }
-  }
+  },
+  "stats_min_marcap": 100000000000
  },
  "signal_params": {
   "rsi_overbought": 70,
