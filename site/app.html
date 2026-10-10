@@ -346,12 +346,9 @@ a.kpi:hover{background:var(--hover)}
 .prob b{font-size:15px;letter-spacing:-.3px;min-width:58px;text-align:right}
 
 /* 조건검색 */
-.filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 24px}
-.fr{display:grid;grid-template-columns:minmax(0,1fr) 78px 10px 78px;gap:6px;align-items:center;font-size:12.5px}
-.fr span{color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.fr i{font-style:normal;color:var(--muted);text-align:center}
-.fr .in{height:30px;padding:0 8px;text-align:right}
-.fr.on span{color:var(--accent);font-weight:700}
+.sgrp{display:grid;gap:8px;border-top:1px solid var(--line);padding-top:12px}
+.sg{display:grid;grid-template-columns:84px minmax(0,1fr);gap:10px;align-items:start}
+.sg>.lbl{padding-top:6px;color:var(--ink-2);font-weight:600}
 .ftop{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
 
 /* 비교 */
@@ -422,7 +419,6 @@ footer a{text-decoration:underline;text-underline-offset:2px}
 
 @media (max-width:1280px){
   .g4{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .filters{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media (max-width:1180px){
   :root{--rail-w:68px;--g:22px}
@@ -471,7 +467,7 @@ footer a{text-decoration:underline;text-underline-offset:2px}
   .wt:nth-child(2n){border-right:0}
   .wgrid .wt:nth-last-child(-n+4){border-bottom:1px solid var(--line)}
   .wgrid .wt:nth-last-child(-n+2){border-bottom:0}
-  .filters{grid-template-columns:minmax(0,1fr)}
+  .sg{grid-template-columns:minmax(0,1fr);gap:4px}.sg>.lbl{padding-top:0}
   .rets{grid-template-columns:repeat(3,minmax(0,1fr))}
   .rets>div:nth-child(3){border-right:0}
   .rets>div:nth-child(-n+3){border-bottom:1px solid var(--line)}
@@ -563,7 +559,7 @@ footer a{text-decoration:underline;text-underline-offset:2px}
 .eart>p,.eart .eul{font-size:15px;line-height:1.8;color:var(--ink);margin:14px 0;max-width:68ch}
 .eul{padding-left:18px}.eul li{margin:6px 0}
 .efig{margin:6px 0 4px;border:1px solid var(--line);border-radius:var(--r);padding:12px 12px 10px;background:var(--surface)}
-.efig svg{display:block;width:100%;height:auto;max-height:340px}
+.efig svg{display:block;width:100%;height:auto;max-height:440px}
 .efig figcaption{font-size:12.5px;color:var(--ink-2);line-height:1.6;margin-top:8px}
 .efig figcaption .clg{padding:0 0 4px}
 .efigs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -615,7 +611,7 @@ tr.cur td{background:var(--accent-soft);font-weight:600}
 .rrb .lab b{font-size:13px} .rrb .lab .r{text-align:right}
 .pk-story p{font-size:14px;line-height:1.7;color:var(--ink);margin:0 0 6px}
 .pk-story p.past{font-size:12.5px;color:var(--muted);margin-top:8px}
-.pk-ev{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}
+.pk-ev{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px;margin-top:10px}
 .pk-ev button{display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:6px 8px;border:1px solid var(--line);border-radius:4px;color:var(--muted);text-align:left;cursor:pointer;background:var(--surface)}
 .pk-ev button small{font-size:11px} .pk-ev button b{font-size:13px;font-weight:600;color:var(--ink-2)}
 .pk-ev button.on{border-color:var(--accent);color:var(--accent)} .pk-ev button.on b{color:var(--ink)}
@@ -646,7 +642,13 @@ table.tbl thead th[aria-sort]{color:var(--accent)}
 .fld{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;font-size:13px;color:var(--ink-2)}
 .fld input{height:38px;border:1px solid var(--line-strong);border-radius:4px;padding:0 10px;font:inherit;color:var(--ink);background:var(--surface)}
 .rtb{font-size:11px;color:var(--accent);border:1px solid var(--accent);border-radius:2px;padding:0 5px;margin-left:6px;font-weight:600;vertical-align:2px}
+.gapl{position:absolute;inset:0;pointer-events:none;z-index:2;overflow:hidden}
+.gapl i{position:absolute;background:color-mix(in srgb,var(--up) 22%,transparent);border-top:1px solid color-mix(in srgb,var(--up) 60%,transparent);border-bottom:1px solid color-mix(in srgb,var(--up) 60%,transparent)}
+.gapl i.gd{background:color-mix(in srgb,var(--down) 22%,transparent);border-color:color-mix(in srgb,var(--down) 60%,transparent)}
+.gapl i.f{background:transparent;border:1px dashed color-mix(in srgb,var(--ink-2) 45%,transparent)}
 
+.pk.wn{border-top-color:var(--down)}
+.rrb .bar i.t1{background:var(--up);width:2px;top:0;bottom:0}
 </style>
 
 <div class="app">
@@ -981,9 +983,9 @@ function page(html) {
 /* ── 데이터 ── */
 async function boot() {
   try {
-    const f = ["meta", "market", "stocks", "rank", "patterns", "rec", "track", "bt", "themes", "ops", "short"];
+    const f = ["meta", "market", "stocks", "rank", "patterns", "rec", "track", "bt", "themes", "ops", "short", "investors"];
     const r = await Promise.all(f.map(x => j(`data/${x}.json`).catch(() => null)));
-    [S.meta, S.market, , S.rank, S.pat, S.rec, S.track, S.bt, S.th, S.ops, S.short] = r;
+    [S.meta, S.market, , S.rank, S.pat, S.rec, S.track, S.bt, S.th, S.ops, S.short, S.inv] = r;
     const stocks = r[2];
     if (!S.meta || !stocks) throw new Error("data");
     S.list = stocks.rows.map(x => Object.fromEntries(stocks.fields.map((k, i) => [k, x[i]])));
@@ -1539,20 +1541,29 @@ function drawWakes(root = document) {
 const SZ = { L: "대형주", S: "중소형주" };
 function rrBar(p) {
   const x = clamp((p.close - p.stop) / ((p.target - p.stop) || 1) * 100, 0, 100);
-  return `<div class="rrb"><div class="bar"><span class="dn" style="width:${x}%"></span><span class="upz" style="left:${x}%;width:${100 - x}%"></span><i style="left:${x}%"></i></div>
-    <div class="lab num"><span>손절 <b class="down">${n(p.stop)}</b> <small>${pct(p.stpPct, 0)}</small></span><span class="c">기준 <b>${n(p.close)}</b></span><span class="r">목표 <b class="up">${n(p.target)}</b> <small>${pct(p.tgtPct, 0)}</small></span></div></div>`;
+  const x1 = p.t1 ? clamp((p.t1 - p.stop) / ((p.target - p.stop) || 1) * 100, 0, 100) : null;
+  return `<div class="rrb"><div class="bar"><span class="dn" style="width:${x}%"></span><span class="upz" style="left:${x}%;width:${100 - x}%"></span><i style="left:${x}%"></i>${x1 != null ? `<i class="t1" style="left:${x1}%"></i>` : ""}</div>
+    <div class="lab num"><span>손절 <b class="down">${n(p.stop)}</b> <small>${pct(p.stpPct, 0)}</small></span>${p.t1 ? `<span class="c">1차 목표 <b class="up">${n(p.t1)}</b> <small>${pct(p.t1Pct, 0)}</small></span>` : `<span class="c">기준 <b>${n(p.close)}</b></span>`}<span class="r">2차 목표 <b class="up">${n(p.target)}</b> <small>${pct(p.tgtPct, 0)}</small></span></div></div>`;
 }
+const chk = (rows, yes, no) => `<table class="tbl evt"><tbody>${rows.map(([a, ok, x]) => `<tr><td class="l" style="width:58px"><b class="${ok ? "okc" : "noc"}">${ok ? yes : no}</b></td><td class="l" style="white-space:normal">${esc(a)}<div class="lbl">${esc(x)}</div></td></tr>`).join("")}</tbody></table>`;
 function evDetail(e) {
-  if (e.k === "추세" && e.rows?.length) return `<table class="tbl evt"><tbody>${e.rows.map(([a, ok, x]) => `<tr><td class="l" style="width:58px"><b class="${ok ? "okc" : "noc"}">${ok ? "충족" : "미충족"}</b></td><td class="l" style="white-space:normal">${esc(a)}<div class="lbl">${esc(x)}</div></td></tr>`).join("")}</tbody></table>
-    <p class="note">긴 기간과 짧은 기간의 평균 가격이 차례로 위에 있고 모두 올라가는 중이면 '오르는 흐름'으로 봐요. 8개 중 6개 이상이면 충족으로 표시해요.</p>`;
-  if (e.k === "큰손 매수") return e.rows?.length ? `<table class="tbl evt"><thead><tr><th class="l">누가</th><th>최근 1개월</th><th>최근 3개월</th></tr></thead><tbody>${e.rows.map(([nm, desc, m1, m3]) => `<tr><td class="l">${esc(nm)}<div class="lbl">${esc(desc)}</div></td><td class="num ${cls(m1)}">${eok(m1)}</td><td class="num ${cls(m3)}">${eok(m3)}</td></tr>`).join("")}</tbody></table>
-    <p class="note">순매수 = 산 금액 − 판 금액(억 원). 플러스면 판 것보다 더 많이 샀다는 뜻이에요.</p>` : `<p class="note">투자자별 매매 자료는 시가총액 3,000억 원 이상 종목에 제공됩니다.</p>`;
+  if (e.k === "추세 템플릿" && e.rows?.length) return chk(e.rows, "충족", "미충족") +
+    `<p class="note">8개 중 7개는 이 종목 자체의 이동평균선 배열과 52주 가격 위치를 보는 <b>절대 기준</b>이고, 마지막 1개(상대강도)만 다른 종목과 비교하는 <b>상대 기준</b>입니다. 장기 이평선이 정배열로 올라가고 주가가 그 위에 있으면 상승 추세(2단계)로 보며, 6개 이상이면 충족으로 표시합니다.</p>`;
+  if (e.k === "기술적 신호" && e.rows?.length) return chk(e.rows, "긍정", "부정") +
+    `<p class="note">정배열·골든크로스는 추세 방향, MACD는 상승 탄력, RSI·볼린저밴드는 과열 여부를 봅니다. 한 가지 신호만으로 판단하지 않고 여러 신호가 같은 방향을 가리킬 때 신뢰도가 높아집니다.</p>`;
+  if (e.k === "수급") {
+    if (!e.rows?.length) return `<p class="note">투자 주체별 매매 자료는 시가총액 1조 원 이상 종목에 제공됩니다.</p>`;
+    const I = S.inv?.g || {};
+    return `<table class="tbl evt"><thead><tr><th class="l">투자 주체</th><th>최근 1개월</th><th>최근 3개월</th><th>20일 중 매수일</th></tr></thead><tbody>${e.rows.map(([g, m1, m3, dd]) => `<tr><td class="l" style="white-space:normal">${esc(g === "기관합계" ? "기관 합계" : g)}${I[g] ? `<div class="lbl">${esc(I[g].style)}</div>` : ""}</td><td class="num ${cls(m1)}">${eok(m1)}</td><td class="num ${cls(m3)}">${eok(m3)}</td><td class="num">${dd ?? "-"}일</td></tr>`).join("")}</tbody></table>
+      ${Object.keys(I).length ? `<p class="note">과거 데이터로 본 특성 — 20거래일 순매수 강도가 상위 10%였던 종목의 이후 성과(시장 대비): ${["외국인", "연기금", "투신", "사모", "금융투자"].filter(g => I[g]).map(g => `${g} 20일 ${pct(I[g].after["20"][0])}p·60일 ${pct(I[g].after["60"][0])}p`).join(" / ")}${S.inv.sample ? " (미리보기 예시 자료)" : ""}</p>` : ""}
+      <p class="note">순매수 = 매수 금액 − 매도 금액(억 원).</p>`;
+  }
   return `<p class="note">${esc(e.text || "-")}</p>`;
 }
 function pickBody(p, past = true) {
   const id = "pk" + p.code + p.H;
   return `${rrBar(p)}
-    ${p.plan ? `<details class="pk-plan" data-stop><summary>목표가·손절가는 이렇게 정했어요</summary><p><b>손절가</b> ${esc(p.plan.stop)}</p><p><b>목표가</b> ${esc(p.plan.target)}</p></details>` : ""}
+    ${p.plan ? `<details class="pk-plan" data-stop><summary>목표가·손절가는 이렇게 정했어요</summary>${p.plan.t1 ? `<p><b>1차 목표</b> ${esc(p.plan.t1)}</p>` : ""}<p><b>2차 목표</b> ${esc(p.plan.target)}</p><p><b>손절가</b> ${esc(p.plan.stop)}</p></details>` : ""}
     <div class="pk-story"><div class="pk-q">왜 오를 거라고 봤나요?</div>${(p.story || []).map(x => `<p>${esc(x)}</p>`).join("")}${past && p.past ? `<p class="past">${esc(p.past)}</p>` : ""}</div>
     <div class="pk-ev" data-stop>${(p.ev || []).map((e, i) => `<button type="button" class="${e.ok ? "on" : ""}" data-ev="${i}" aria-expanded="false"><small>${e.k}</small><b>${esc(e.v)}</b></button>`).join("")}</div>
     <div class="pk-evd" id="${id}" data-stop hidden></div>`;
@@ -1579,29 +1590,52 @@ function pickCard(p) {
 }
 VIEWS.ai = function () {
   if (!S.rec?.ok) { page(`<div class="ph"><div><h1>추천종목</h1></div></div><div class="card empty">추천종목 산출 결과가 아직 없습니다.</div>`); return; }
-  const hs = [5, 20, 60].filter(h => recH(h));
-  if (!hs.includes(+st.aiH)) st.aiH = hs.includes(20) ? 20 : hs[0];
+  const hs = [5, 20, 60].filter(h => recH(h)), W = S.rec.warn;
+  const tabs = [...hs.map(h => [h, `${HZL(h)} ${HZP(h)}`]), ...(W?.list?.length ? [["w", "하락 주의"]] : [])];
+  if (!tabs.some(t => String(t[0]) === String(st.aiH))) st.aiH = hs.includes(20) ? 20 : hs[0];
   st.aiZ ||= "L";
   const v = page(`<div class="ph"><div><h1>추천종목</h1><p>${dt(S.rec.asof || S.meta.asof)} 종가 기준 · 투자의견 매수 이상 종목 중 점수 상위</p></div>
-      <div class="controls">${seg("aih", hs.map(h => [h, `${HZL(h)} ${HZP(h)}`]), st.aiH)}${seg("aiz", [["L", "대형주"], ["S", "중소형주"]], st.aiZ)}</div></div>
+      <div class="controls">${seg("aih", tabs, st.aiH)}<span id="aizw">${seg("aiz", [["L", "대형주"], ["S", "중소형주"]], st.aiZ)}</span></div></div>
     <section class="card" id="aival"></section>
     <div class="pk-grid mt" id="apicks"></div>
     <p class="note mt">과거 성적은 학습에 쓰지 않은 기간에 같은 규칙으로 매일 고른 종목을 다음 날 시가에 사서, 목표가·손절가·보유 기간 만료 중 먼저 오는 때 판 결과입니다(거래비용 0.25% 차감). 대형주는 시가총액 1조 원 이상입니다. 과거 성적이 미래 수익을 보장하지 않습니다.</p>`);
   const draw = () => {
+    $("#aizw").hidden = st.aiH === "w";
+    if (st.aiH === "w") return drawWarn(W);
     const H = +st.aiH, Z = st.aiZ, R = recH(H), V = R.segs?.[Z] || R.val || {}, P = (R.picks || []).filter(p => (p.size || "L") === Z).map(p => ({ ...p, H }));
     const cell = (x, k) => `<div><span class="v">${x}</span><span class="k">${k}</span></div>`;
     $("#aival").innerHTML = `<div class="card-h"><h2>이 방법으로 골랐다면 <small>${SZ[Z]} · ${V.from ? `${dt(V.from)} ~ ${dt(V.to)} · ` : ""}${(V.n || 0).toLocaleString()}번 추천 기준</small></h2></div>${R.rule ? `<p class="lbl" style="padding:12px 16px 0;font-size:12.5px">고르는 방법: ${esc(R.rule)}</p>` : ""}
       <div class="card-b"><div class="summ num">${cell(`<span class="${cls(V.avg)}">${pct(V.avg)}</span>`, `추천 종목 ${HZP(H)} 평균`)}${cell(`<span class="${cls(V.ew)}">${pct(V.ew)}</span>`, `같은 규모 일반 종목`)}
-        ${cell(`<span class="${cls(V.mkt)}">${pct(V.mkt)}</span>`, "시장 지수")}${cell(`${p1(V.win)}%`, "올라서 끝난 비율")}${cell(`<span class="up">${pct(V.up, 0)}</span> / <span class="down">${pct(V.dn, 0)}</span>`, "오를 때 / 내릴 때 평균")}</div>
+        ${cell(`<span class="${cls(V.mkt)}">${pct(V.mkt)}</span>`, "시장 지수")}${V.t1 != null ? cell(`<span class="up">${p1(V.t1)}%</span>`, `${HZP(H)} 안에 1차 목표 도달 <small>(일반 ${p1(V.t1base)}%)</small>`) : ""}${cell(`${p1(V.win)}%`, "팔았을 때 수익인 비율")}${cell(`<span class="up">${pct(V.up, 0)}</span> / <span class="down">${pct(V.dn, 0)}</span>`, "오를 때 / 내릴 때 평균")}</div>
       <p class="note" style="margin-top:10px">${V.ew > 0.1 && V.avg >= V.ew * 1.5 ? `추천 종목은 같은 기간 같은 규모 일반 종목 평균의 ${n(V.avg / V.ew, 1)}배를 벌었습니다. ` : ""}${V.avg < V.mkt ? `대형주가 이끈 시장 지수(${pct(V.mkt)})보다는 낮았습니다. ` : `시장 지수(${pct(V.mkt)})보다도 높았습니다. `}수익 종목의 상승폭이 손실 종목의 하락폭보다 커서 평균이 플러스가 되는 구조라, 여러 종목에 나눠 담는 것이 과거 성적에 가깝습니다.</p></div>`;
     if (V.avg - V.ew < 0.3) $("#aival").insertAdjacentHTML("beforeend", `<p class="warnbox">${HZL(H)} ${SZ[Z]} 추천은 과거 검증에서 같은 규모 일반 종목 평균과 차이가 크지 않았습니다. 참고용으로 보세요.</p>`);
     $("#apicks").innerHTML = P.map(p => pickCard(p)).join("") || `<div class="card empty">오늘은 조건을 만족하는 종목이 없습니다.</div>`;
     bindEv($("#apicks"), P);
   };
-  onSeg(v, "aih", x => { st.aiH = +x; draw(); });
+  onSeg(v, "aih", x => { st.aiH = x === "w" ? "w" : +x; draw(); });
   onSeg(v, "aiz", x => { st.aiZ = x; draw(); });
   draw();
 };
+/* 하락 주의 — 검증된 범위(중소형주)만, 숫자로 냉정하게 */
+function drawWarn(W) {
+  const a = W.val?.["20"] || {}, b = W.val?.["60"] || {};
+  const cell = (x, k) => `<div><span class="v">${x}</span><span class="k">${k}</span></div>`;
+  $("#aival").innerHTML = `<div class="card-h"><h2>이 목록에 올랐던 종목은 <small>중소형주 · ${b.from ? `${dt(b.from)} ~ ${dt(b.to)} · ` : ""}${(b.n || 0).toLocaleString()}건 기준</small></h2></div>
+    <p class="lbl" style="padding:12px 16px 0;font-size:12.5px">고르는 방법: ${esc(W.rule)}</p>
+    <div class="card-b"><div class="summ num">${cell(`<span class="down">${p1(a.fell)}%</span>`, "1개월 뒤 하락")}${cell(`<span class="down">${p1(b.fell)}%</span>`, "3개월 뒤 하락")}
+      ${cell(`<span class="down">${p1(b.big)}%</span>`, "3개월 뒤 10% 넘게 하락")}${cell(`<span class="${cls(b.avg)}">${pct(b.avg)}</span>`, "3개월 평균")}${cell(`<span class="${cls(b.ew)}">${pct(b.ew)}</span>`, "같은 규모 일반 종목")}</div>
+    <p class="note" style="margin-top:10px">과거 이 목록에 오른 종목 100개 중 ${Math.round(b.fell)}개는 3개월 뒤 산 가격보다 낮았고, ${Math.round(b.big)}개는 10% 넘게 빠졌습니다. ${Math.round(b.under)}%의 달에서 같은 규모 일반 종목 평균보다 못했습니다. 반대로 ${Math.round(b.up10)}개는 10% 넘게 올랐으니, 예외도 있습니다.</p>
+    <p class="note">대형주는 같은 방법으로 하락을 맞힌 비율이 절반 수준이라 목록에 넣지 않았습니다. 이 목록은 매수를 피하거나 보유 비중을 점검할 때 참고하는 용도이며, 공매도를 권하는 것이 아닙니다.</p></div>`;
+  const L = W.list.map(p => ({ ...p, H: "w" }));
+  $("#apicks").innerHTML = L.map(p => { const s = S.by[p.code] || {};
+    return `<article class="pk wn" data-pc="${p.code}" data-ph="w">
+      <div class="pk-h"><div class="pk-n"><span class="rk num">${p.rank}</span><a href="#stock-${p.code}"><b>${esc(p.name)}</b></a><small>${esc(p.theme || "")} · 퀀트 스코어 ${n(p.score, 0)}</small></div>
+        <div class="pk-px num"><b>${n(s.price ?? p.close)}</b><small class="${cls(s.pct)}">${pct(s.pct)}</small></div></div>
+      <div class="pk-story"><div class="pk-q">왜 떨어질 거라고 보나요?</div>${(p.story || []).map(x => `<p>${esc(x)}</p>`).join("")}</div>
+      <div class="pk-ev" data-stop>${(p.ev || []).map((e, i) => `<button type="button" data-ev="${i}" aria-expanded="false"><small>${e.k}</small><b>${esc(e.v)}</b></button>`).join("")}</div>
+      <div class="pk-evd" data-stop hidden></div></article>`; }).join("");
+  bindEv($("#apicks"), L);
+}
 VIEWS.bt = function () {
   const B = S.bt;
   if (!B?.ok) { page(`<div class="ph"><div><h1>전략 검증</h1></div></div><div class="card empty">전략 검증 결과가 아직 없습니다. 다음 정기 갱신 후 표시됩니다.</div>`); return; }
@@ -1775,91 +1809,86 @@ VIEWS.pat = function () {
 };
 
 /* ── 조건검색 ── */
-const SCR = [
-  ["cap", "시가총액(억)"], ["per", "PER(배)"], ["pbr", "PBR(배)"], ["div", "배당수익률(%)"], ["frg", "외국인 보유율(%)"], ["pct", "당일 등락률(%)"],
-  ["r1w", "1주 수익률(%)"], ["r1m", "1개월 수익률(%)"], ["r3m", "3개월 수익률(%)"], ["r1y", "1년 수익률(%)"], ["rsi", "RSI(14)"], ["hi52", "52주 고점 대비(%)"],
-  ["d20", "20일선 이격(%)"], ["volr", "거래량 배수(20일 평균 대비)"], ["atr", "일평균 변동폭(%)"], ["frg5", "외국인 5일 순매수(억)"], ["inst5", "기관 5일 순매수(억)"], ["pen5", "연기금 5일 순매수(억)"]
+const lead = s => (thBy(thOf(s))?.rank ?? 99) <= 5;
+/* 조건 묶음 — 한 묶음 안에서 하나만 고르는 것(one)과 여러 개 겹쳐 고르는 것 */
+const SCR_G = [
+  ["규모", 1, [["big", "대형 (1조+)", s => s.cap >= 10000], ["mid", "중형 (3천억~1조)", s => s.cap >= 3000 && s.cap < 10000], ["small", "소형 (3천억 미만)", s => s.cap < 3000]]],
+  ["투자의견", 1, [["op2", "강력매수", s => s.op === 2], ["op1", "매수 이상", s => s.op >= 1], ["opm", "매도 이하", s => s.op != null && s.op <= -1], ["ai90", "퀀트 스코어 90+", s => s.opS >= 90]]],
+  ["추세", 0, [["align1", "정배열", s => s.align === 1], ["alignm", "역배열", s => s.align === -1], ["above20", "20일선 위", s => s.d20 > 0], ["near", "52주 고점 5% 이내", s => s.hi52 != null && s.hi52 >= -5], ["nh", "52주 신고가", s => s.nh === 1], ["nl", "52주 신저가", s => s.nl === 1]]],
+  ["모멘텀", 0, [["m_up", "1개월 +10% 이상", s => s.r1m >= 10], ["m_dn", "1개월 −10% 이하", s => s.r1m != null && s.r1m <= -10], ["rsi_lo", "RSI 30 이하 (과매도)", s => s.rsi != null && s.rsi <= 30], ["rsi_hi", "RSI 70 이상 (과매수)", s => s.rsi >= 70], ["vol2", "거래량 2배+", s => s.volr >= 2]]],
+  ["수급 (5일)", 0, [["f_frg", "외국인 순매수", s => s.frg5 > 0], ["f_inst", "기관 순매수", s => s.inst5 > 0], ["f_pen", "연기금 순매수", s => s.pen5 > 0]]],
+  ["가치", 0, [["per10", "PER 10 이하", s => s.per > 0 && s.per <= 10], ["pbr1", "PBR 1 이하", s => s.pbr > 0 && s.pbr <= 1], ["div3", "배당 3% 이상", s => s.div >= 3]]],
+  ["기타", 0, [["lead5", "주도 업종 상위 5", lead], ["ai", "추천종목", s => !!S.pick[s.code]], ["watch", "관심종목만", s => watchList().includes(s.code)]]]
 ];
-const SCR_T = [["align1", "정배열", s => s.align === 1], ["alignm", "역배열", s => s.align === -1], ["nh", "52주 신고가", s => s.nh === 1], ["nl", "52주 신저가", s => s.nl === 1],
-  ["lead5", "주도섹터 상위 5", s => (thBy(thOf(s))?.rank ?? 99) <= 5], ["op2", "강력매수", s => s.op === 2], ["op1", "매수 이상", s => s.op >= 1], ["opm", "매도 이하", s => s.op != null && s.op <= -1],
-  ["ai", "스윙 추천종목", s => !!S.pick[s.code]], ["ai90", "투자의견 점수 90 이상", s => s.opS >= 90], ["tone1", "기술적 추세 상승", s => s.tone === 1],
-  ["watch", "관심종목만", s => watchList().includes(s.code)]];
+const SCR_T = SCR_G.flatMap(g => g[2]);
 const PRESETS = [
   ["하락 빗각 돌파", { sg: "tl_dn_brk" }],
   ["전고점 돌파", { sg: "prev_high_brk" }],
-  ["기준봉 중심값 지지", { sg: "base_mid" }],
   ["구름대 상향 돌파", { sg: "ichi_cloud_up" }],
-  ["기간조정 후 돌파", { sg: "period_brk" }],
   ["강력매수", { t: ["op2"] }],
-  ["주도섹터 매수 의견", { t: ["op1", "lead5"] }],
-  ["스코어 상위 + 상승 추세", { t: ["ai90", "tone1"] }],
-  ["추세 + 외국인 매수", { t: ["align1"], r: { frg5: [0.1, null], r1m: [0, null] } }],
+  ["주도 업종 매수 의견", { t: ["op1", "lead5"] }],
+  ["추세 + 외국인 매수", { t: ["align1", "f_frg"] }],
   ["52주 신고가", { t: ["nh"] }],
-  ["낙폭과대", { r: { rsi: [null, 32], hi52: [null, -30] } }],
-  ["저평가 고배당", { r: { per: [0.1, 10], pbr: [null, 1], div: [3, null] } }],
-  ["거래량 급증 상승", { r: { volr: [2, null], pct: [0, null] } }],
-  ["기관·연기금 동반 매수", { r: { inst5: [0.1, null], pen5: [0.1, null] } }],
-  ["눌림목", { t: ["align1"], r: { d20: [-4, 1], rsi: [38, 55] } }],
-  ["대형 우량주", { r: { cap: [100000, null], per: [0.1, 20] } }]
+  ["낙폭과대", { t: ["rsi_lo", "m_dn"] }],
+  ["저평가 고배당", { t: ["per10", "pbr1", "div3"] }],
+  ["거래량 급증", { t: ["vol2", "above20"] }],
+  ["기관·연기금 동반 매수", { t: ["f_inst", "f_pen"] }],
+  ["대형 우량주", { t: ["big", "op1"] }]
 ];
 const SCOLS = [["opS", "투자의견", s => s.op != null ? `${opTag(s.op)} <span class="lbl">${n(s.opS, 0)}</span>` : "-"], ["ai20", "스코어", s => s.ai20 != null ? n(s.ai20, 0) : "-"], ["price", "현재가", s => n(s.price)], ["pct", "등락률", s => `<span class="${cls(s.pct)}">${pct(s.pct)}</span>`], ["cap", "시가총액", s => eok(s.cap, false)],
   ["per", "PER", s => s.per ? n(s.per, 1) : "-"], ["pbr", "PBR", s => s.pbr ? n(s.pbr, 2) : "-"], ["div", "배당", s => s.div ? n(s.div, 2) + "%" : "-"],
   ["r1m", "1개월", s => `<span class="${cls(s.r1m)}">${pct(s.r1m, 1)}</span>`], ["rsi", "RSI", s => s.rsi != null ? n(s.rsi, 0) : "-"], ["hi52", "고점 대비", s => pct(s.hi52, 1)],
   ["volr", "거래량 배수", s => s.volr != null ? n(s.volr, 1) + "배" : "-"], ["frg5", "외국인 5일", s => `<span class="${cls(s.frg5)}">${eok(s.frg5)}</span>`], ["inst5", "기관 5일", s => `<span class="${cls(s.inst5)}">${eok(s.inst5)}</span>`]];
 VIEWS.screen = function () {
-  const F = st.scr ||= store.get("scr", { mk: "ALL", sec: "", r: {}, t: [] });
-  F.sg ??= "";
+  const F = st.scr ||= store.get("scr", { mk: "ALL", sec: "", t: [] });
+  F.sg ??= ""; delete F.r; F.t = (F.t || []).filter(k => SCR_T.some(t => t[0] === k));
   const PR = S.pat?.rows || [], pcats = [...new Set(PR.map(r => r[7]).filter(Boolean))];
   const sigSel = PR.length ? `<select class="in" id="ssig" style="width:auto;max-width:100%;height:32px;font-size:13px" aria-label="기술적 신호"><option value="">기술적 신호 (최근 3일) 전체</option>
     ${pcats.map(c => `<optgroup label="${c}">${PR.filter(r => r[7] === c).map(r => `<option value="${r[0]}" ${r[0] === F.sg ? "selected" : ""}>${esc(r[1])}</option>`).join("")}</optgroup>`).join("")}</select>` : "";
   const secs = S.sectors.map(g => g.name).sort((a, b) => a.localeCompare(b, "ko"));
-  const v = page(`<div class="ph"><div><h1>조건검색</h1><p>조건 입력 즉시 반영 · 빈칸은 조건 없음</p></div></div>
+  const v = page(`<div class="ph"><div><h1>조건검색</h1><p>원하는 조건을 누르면 바로 걸러집니다</p></div></div>
     <section class="card"><div class="card-b" style="padding-top:16px">
       <div class="ftop"><div class="chips">${PRESETS.map(([l], i) => `<button class="chip" type="button" data-pre="${i}">${l}</button>`).join("")}</div><button class="btn sm" id="sreset" type="button">초기화</button></div>
       <div class="ftop mt"><div class="controls">${seg("smk", [["ALL", "전체"], ["P", "코스피"], ["Q", "코스닥"]], F.mk)}
         <select class="in" id="ssec" style="width:auto;height:32px;font-size:13px" aria-label="업종"><option value="">모든 업종</option>${secs.map(s => `<option ${s === F.sec ? "selected" : ""}>${esc(s)}</option>`).join("")}</select>${sigSel}</div>
-        <div class="chips" id="stog">${SCR_T.map(([k, l]) => `<button class="chip" type="button" data-t="${k}" aria-pressed="${F.t.includes(k)}">${l}</button>`).join("")}</div></div>
-      <div class="filters mt" id="sfil">${SCR.map(([k, l]) => `<div class="fr" data-f="${k}"><span>${l}</span><input class="in num" data-k="${k}" data-b="0" inputmode="decimal" placeholder="최소" aria-label="${l} 최소"><i>~</i><input class="in num" data-k="${k}" data-b="1" inputmode="decimal" placeholder="최대" aria-label="${l} 최대"></div>`).join("")}</div>
+</div>
+      <div class="sgrp mt" id="stog">${SCR_G.map(([g, one, L]) => `<div class="sg"><span class="lbl">${g}</span><div class="chips" data-one="${one}">${L.map(([k, l]) => `<button class="chip" type="button" data-t="${k}" aria-pressed="${F.t.includes(k)}">${l}</button>`).join("")}</div></div>`).join("")}</div>
     </div></section>
     <section class="card mt"><div class="card-h"><h2 id="scnt"></h2><span class="lbl" id="ssort"></span></div><div class="card-b flush"><div class="scroll" id="sres"></div></div></section>`);
   const fill = () => {
-    $$("#sfil input", v).forEach(i => { const r = F.r[i.dataset.k]; const x = r?.[+i.dataset.b]; i.value = x == null ? "" : x; });
-    $$("#sfil .fr", v).forEach(f => f.classList.toggle("on", !!(F.r[f.dataset.f] && (F.r[f.dataset.f][0] != null || F.r[f.dataset.f][1] != null))));
     $$("#stog button", v).forEach(b => b.setAttribute("aria-pressed", F.t.includes(b.dataset.t)));
     $$('[data-seg="smk"] button', v).forEach(b => b.setAttribute("aria-pressed", b.dataset.v === F.mk));
     $("#ssec").value = F.sec;
     if ($("#ssig")) $("#ssig").value = F.sg || "";
   };
   const save = () => { store.set("scr", F); st.scrN = 100; drawScreen(); };
-  $$("#sfil input", v).forEach(i => i.oninput = () => {
-    const k = i.dataset.k, x = i.value.trim() === "" || isNaN(+i.value) ? null : +i.value;
-    const r = F.r[k] || [null, null]; r[+i.dataset.b] = x; F.r[k] = r;
-    if (r[0] == null && r[1] == null) delete F.r[k];
-    i.closest(".fr").classList.toggle("on", !!F.r[k]); save();
+  $$("#stog button", v).forEach(b => b.onclick = () => {
+    const k = b.dataset.t, on = !F.t.includes(k);
+    F.t = F.t.filter(x => x !== k);
+    if (on) { if (b.parentNode.dataset.one === "1") { const sib = $$("button", b.parentNode).map(x => x.dataset.t); F.t = F.t.filter(x => !sib.includes(x)); } F.t.push(k); }
+    fill(); save();
   });
-  $$("#stog button", v).forEach(b => b.onclick = () => { const k = b.dataset.t; F.t = F.t.includes(k) ? F.t.filter(x => x !== k) : [...F.t, k]; b.setAttribute("aria-pressed", F.t.includes(k)); save(); });
   onSeg(v, "smk", x => { F.mk = x; save(); });
   $("#ssec").onchange = e => { F.sec = e.target.value; save(); };
   if ($("#ssig")) $("#ssig").onchange = e => { F.sg = e.target.value; save(); };
-  $$("[data-pre]", v).forEach(b => b.onclick = () => { const p = PRESETS[+b.dataset.pre][1]; F.r = JSON.parse(JSON.stringify(p.r || {})); F.t = [...(p.t || [])]; F.sec = ""; F.sg = p.sg || ""; fill(); save(); });
-  $("#sreset").onclick = () => { F.r = {}; F.t = []; F.sec = ""; F.sg = ""; F.mk = "ALL"; fill(); save(); };
+  $$("[data-pre]", v).forEach(b => b.onclick = () => { const p = PRESETS[+b.dataset.pre][1]; F.t = [...(p.t || [])]; F.sec = ""; F.sg = p.sg || ""; fill(); save(); });
+  $("#sreset").onclick = () => { F.t = []; F.sec = ""; F.sg = ""; F.mk = "ALL"; fill(); save(); };
   fill(); drawScreen();
 };
 function drawScreen() {
   const F = st.scr, [sk, sd] = st.scrSort;
   const tg = SCR_T.filter(t => F.t.includes(t[0]));
   const si = F.sg ? (S.pat?.rows || []).findIndex(r => r[0] === F.sg) : -1;
-  const L = S.list.filter(s => (F.mk === "ALL" || s.mkt === F.mk) && (!F.sec || s.sector === F.sec) && (si < 0 || (s.sg || []).includes(si)) &&
-    Object.entries(F.r).every(([k, [a, b]]) => { const x = s[k]; if (x == null) return false; return (a == null || x >= a) && (b == null || x <= b); }) && tg.every(t => t[2](s)))
+  const L = S.list.filter(s => (F.mk === "ALL" || s.mkt === F.mk) && (!F.sec || s.sector === F.sec) && (si < 0 || (s.sg || []).includes(si)) && tg.every(t => t[2](s)))
     .sort((a, b) => ((a[sk] ?? -Infinity) - (b[sk] ?? -Infinity)) * sd || b.cap - a.cap);
   const T = L.slice(0, st.scrN), col = SCOLS.find(c => c[0] === sk);
   $("#scnt").innerHTML = `검색 결과 <small class="num">${L.length.toLocaleString()}종목</small>`;
   $("#ssort").textContent = `${col ? col[1] : "시가총액"} ${sd < 0 ? "내림차순" : "오름차순"} · 열 이름 선택 시 정렬`;
   $("#sres").innerHTML = T.length ? `<table class="tbl"><thead><tr><th class="rk">#</th><th class="l">종목</th>${SCOLS.map(([k, l]) => `<th class="sort ${k === sk ? "on" : ""}" data-sk="${k}">${l}</th>`).join("")}<th></th></tr></thead><tbody>
-    ${T.map((s, i) => `<tr data-go="${s.code}"><td class="rk num">${i + 1}</td><td class="l">${nameCell(s, `${mkName(s.mkt)} · ${esc(s.sector)}${S.pick[s.code] ? ` · <span style="color:var(--accent);font-weight:700">스윙 추천 ${S.pick[s.code].rank}위</span>` : ""}`)}</td>
+    ${T.map((s, i) => `<tr data-go="${s.code}"><td class="rk num">${i + 1}</td><td class="l">${nameCell(s, `${mkName(s.mkt)} · ${esc(s.sector)}${S.pick[s.code] ? ` · <span style="color:var(--accent);font-weight:700">${({5:"단기",20:"스윙",60:"중장기"})[S.pick[s.code].H]} 추천 ${S.pick[s.code].rank}위</span>` : ""}`)}</td>
       ${SCOLS.map(([k, , f]) => `<td class="num">${f(s)}</td>`).join("")}<td>${starBtn(s.code)}</td></tr>`).join("")}</tbody></table>
     ${L.length > T.length ? `<div style="padding:12px;text-align:center"><button class="btn sm" id="smore">더 보기 (${T.length}/${L.length})</button></div>` : ""}`
-    : `<div class="empty">조건에 해당하는 종목이 없습니다. 조건 범위를 넓혀 주십시오.</div>`;
+    : `<div class="empty">조건에 해당하는 종목이 없습니다. 조건을 하나 빼 보세요.</div>`;
   $$("[data-sk]").forEach(h => h.onclick = () => { const k = h.dataset.sk; st.scrSort = [k, st.scrSort[0] === k ? -st.scrSort[1] : -1]; drawScreen(); });
   if ($("#smore")) $("#smore").onclick = () => { st.scrN += 100; drawScreen(); };
   bindGo($("#sres"));
@@ -2168,6 +2197,159 @@ const EF = (() => {
   const rr = [40, 42, 41, 44, 43, 46, 45, 48, 47, 50];
   const f9 = fig(mk(rr, .8), { h: 160, zone: [[9, 9, 50, 72, "var(--up)"], [9, 9, 44, 50, "var(--down)"]], hl: [[72, "목표가", "var(--up)", 1], [50, "매수가", "var(--ink)"], [44, "손절가", "var(--down)", 1]] });
 
+  /* ── 확장 그림 도구: 지표 보조창·밴드·종가선 ── */
+  const rnd = s => () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const walk = (keys, amp = 0.8, seed = 7) => { const r = rnd(seed), out = [];
+    for (let k = 0; k < keys.length - 1; k++) { const [i0, v0] = keys[k], [i1, v1] = keys[k + 1];
+      for (let i = i0; i < i1; i++) out.push(+(v0 + (v1 - v0) * (i - i0) / (i1 - i0) + (r() - .5) * 2 * amp).toFixed(2)); }
+    out.push(keys[keys.length - 1][1]); return out; };
+  const sdv = (a, n) => a.map((_, i) => { if (i < n - 1) return null; const s = a.slice(i - n + 1, i + 1), m = s.reduce((x, y) => x + y, 0) / n; return Math.sqrt(s.reduce((x, y) => x + (y - m) ** 2, 0) / n); });
+  const ema = (a, n) => { const k = 2 / (n + 1); let e = a[0]; return a.map(v => (e = v * k + e * (1 - k))); };
+  const rsiOf = (a, n = 14) => { let g = 0, l = 0; return a.map((v, i) => { if (!i) return null; const d = v - a[i - 1];
+    if (i <= n) { g += Math.max(d, 0) / n; l += Math.max(-d, 0) / n; return i < n ? null : 100 - 100 / (1 + g / (l || 1e-9)); }
+    g = (g * (n - 1) + Math.max(d, 0)) / n; l = (l * (n - 1) + Math.max(-d, 0)) / n; return 100 - 100 / (1 + g / (l || 1e-9)); }); };
+  const hhv = (a, n) => a.map((_, i) => i < n - 1 ? null : Math.max(...a.slice(i - n + 1, i + 1)));
+  const llv = (a, n) => a.map((_, i) => i < n - 1 ? null : Math.min(...a.slice(i - n + 1, i + 1)));
+  const sh = (a, k) => a.map((_, i) => i - k >= 0 ? a[i - k] : null);
+  function fig2(o) {
+    const W = o.w || 360, R = o.r ?? 8, PH = o.h || 170, SH = o.sub ? (o.sub.h || 72) : 0, G = o.sub ? 8 : 0, H = PH + G + SH;
+    const C = o.c, cand = Array.isArray(C[0]), n = o.n || C.length, bw = (W - R - 8) / n;
+    const hiA = cand ? C.map(c => c[1]) : C, loA = cand ? C.map(c => c[2]) : C;
+    const vs = [...hiA, ...loA, ...(o.ln || []).flatMap(x => x[0]), ...(o.band || []).flatMap(x => [...x[0], ...x[1]]), ...(o.hl || []).map(x => x[0]), ...(o.seg || []).flatMap(x => [x[1], x[3]]), ...(o.zone || []).flatMap(z => [z[2], z[3]])].filter(v => v != null && isFinite(v));
+    const lo0 = Math.min(...vs), hi0 = Math.max(...vs), pd = (hi0 - lo0) * .08, lo = lo0 - pd, hi = hi0 + pd;
+    const X = i => 4 + bw * (i + .5), Y = p => 6 + (1 - (p - lo) / (hi - lo)) * (PH - 12), up = "var(--up)", dn = "var(--down)";
+    const poly = (a, Yf) => a.map((v, i) => v == null ? null : `${X(i).toFixed(1)},${Yf(v).toFixed(1)}`).filter(Boolean).join(" ");
+    let g = "";
+    (o.zone || []).forEach(([i1, i2, p1, p2, c, dash]) => g += `<rect x="${X(i1) - bw / 2}" y="${Y(Math.max(p1, p2))}" width="${(i2 - i1 + 1) * bw}" height="${Math.abs(Y(p1) - Y(p2))}" fill="${c}" fill-opacity="${dash ? 0 : .16}" ${dash ? `stroke="${c}" stroke-dasharray="3 2" stroke-width="1"` : ""}/>`);
+    (o.band || []).forEach(([u, l, c]) => { const idx = u.map((v, i) => v != null && l[i] != null ? i : -1).filter(i => i >= 0);
+      g += `<polygon points="${[...idx.map(i => `${X(i).toFixed(1)},${Y(u[i]).toFixed(1)}`), ...idx.reverse().map(i => `${X(i).toFixed(1)},${Y(l[i]).toFixed(1)}`)].join(" ")}" fill="${c}" fill-opacity=".13"/>`; });
+    (o.hl || []).forEach(([p, lab, c, d]) => g += `<line x1="4" x2="${W - R}" y1="${Y(p)}" y2="${Y(p)}" stroke="${c}" ${d ? `stroke-dasharray="4 3"` : ""}/>${lab ? `<text x="${W - R + 5}" y="${Y(p) + 4}" fill="${c}" font-size="11">${lab}</text>` : ""}`);
+    if (cand) C.forEach(([op, h, l, cl], i) => { const c = cl >= op ? up : dn, x = X(i), b = Math.max(bw * .62, 1.6);
+      g += `<line x1="${x}" x2="${x}" y1="${Y(h)}" y2="${Y(l)}" stroke="${c}" stroke-width="${bw < 4 ? .8 : 1.1}"/><rect x="${x - b / 2}" y="${Y(Math.max(op, cl))}" width="${b}" height="${Math.max(Math.abs(Y(op) - Y(cl)), 1)}" fill="${c}"/>`; });
+    else g += `<polyline points="${poly(C, Y)}" fill="none" stroke="var(--ink)" stroke-width="1.5" stroke-linejoin="round"/>`;
+    (o.ln || []).forEach(([a, c, w, d]) => g += `<polyline points="${poly(a, Y)}" fill="none" stroke="${c}" stroke-width="${w || 1.5}" ${d ? `stroke-dasharray="5 3"` : ""}/>`);
+    (o.seg || []).forEach(([i1, p1, i2, p2, c, d]) => g += `<line x1="${X(i1)}" y1="${Y(p1)}" x2="${X(i2)}" y2="${Y(p2)}" stroke="${c}" stroke-width="1.8" ${d ? `stroke-dasharray="5 3"` : ""}/>`);
+    (o.pt || []).forEach(([i, p, k, below]) => { const y = Math.min(Math.max(Y(p) + (below ? 13 : -13), 9), PH - 9);
+      g += `<circle cx="${X(i)}" cy="${y}" r="7.5" fill="var(--surface)" stroke="var(--ink)"/><text x="${X(i)}" y="${y + 3.6}" font-size="10" text-anchor="middle" fill="var(--ink)" font-weight="700">${k}</text>`; });
+    if (o.sub) { const s = o.sub, top = PH + G, sv = [...(s.ln || []).flatMap(x => x[0]), ...(s.bars || []), ...(s.hl || []).map(x => x[0])].filter(v => v != null && isFinite(v));
+      const sl = s.lo ?? Math.min(...sv, s.bars ? 0 : Infinity), shh = s.hi ?? Math.max(...sv, s.bars ? 0 : -Infinity), Ys = v => top + 4 + (1 - (v - sl) / ((shh - sl) || 1)) * (SH - 8);
+      g += `<line x1="4" x2="${W - R}" y1="${top}" y2="${top}" stroke="var(--line)"/>`;
+      (s.bars || []).forEach((v, i) => { if (v == null) return; const y0 = Ys(0), y1 = Ys(v); g += `<rect x="${X(i) - bw * .3}" y="${Math.min(y0, y1)}" width="${bw * .6}" height="${Math.max(Math.abs(y1 - y0), .6)}" fill="${v >= 0 ? up : dn}" opacity=".5"/>`; });
+      (s.hl || []).forEach(([p, lab, c]) => g += `<line x1="4" x2="${W - R}" y1="${Ys(p)}" y2="${Ys(p)}" stroke="${c}" stroke-dasharray="4 3"/>${lab ? `<text x="${W - R + 5}" y="${Ys(p) + 4}" fill="${c}" font-size="11">${lab}</text>` : ""}`);
+      (s.ln || []).forEach(([a, c, w, d]) => g += `<polyline points="${poly(a, Ys)}" fill="none" stroke="${c}" stroke-width="${w || 1.5}" ${d ? `stroke-dasharray="4 3"` : ""}/>`);
+      (s.seg || []).forEach(([i1, p1, i2, p2, c]) => g += `<line x1="${X(i1)}" y1="${Ys(p1)}" x2="${X(i2)}" y2="${Ys(p2)}" stroke="${c}" stroke-width="1.8"/>`);
+      (s.pt || []).forEach(([i, p, k]) => { const y = Math.max(Ys(p) - 12, top + 9); g += `<circle cx="${X(i)}" cy="${y}" r="7.5" fill="var(--surface)" stroke="var(--ink)"/><text x="${X(i)}" y="${y + 3.6}" font-size="10" text-anchor="middle" fill="var(--ink)" font-weight="700">${k}</text>`; });
+      if (s.lab && R > 30) g += `<text x="${W - R + 5}" y="${top + 13}" fill="var(--muted)" font-size="11">${s.lab}</text>`; }
+    return `<svg viewBox="0 0 ${W} ${H}" role="img">${g}</svg>`;
+  }
+  const ohlc = (cl, w = .9, seed = 3) => { const r = rnd(seed); return cl.map((c, i) => { const o = i ? cl[i - 1] + (r() - .5) * w * .6 : c - w;
+    return [+o.toFixed(2), +(Math.max(o, c) + w * (.3 + r())).toFixed(2), +(Math.min(o, c) - w * (.3 + r())).toFixed(2), c]; }); };
+  const crossAt = (a, b, from = 0, dir = 1) => { for (let i = Math.max(from, 1); i < a.length; i++) if (a[i - 1] != null && b[i - 1] != null && a[i] != null && b[i] != null && dir * (a[i - 1] - b[i - 1]) <= 0 && dir * (a[i] - b[i]) > 0) return i; return -1; };
+  const S1 = "var(--s1)", S2 = "var(--s2)", S3 = "var(--s3)", S4 = "var(--s4)", UP = "var(--up)", DN = "var(--down)";
+
+  // 캔들 조합
+  const cc = (bars, cap) => wrap(fig2({ c: bars, h: 120, w: 130 }), cap);
+  const cmb = `<div class="efigs four">${cc([[60, 61, 55, 56], [56, 57, 51, 52], [53, 54, 48, 49], [48, 58, 47, 57.5]], "<b>상승장악형</b> 하락 끝에서 앞 음봉을 통째로 감싸는 양봉")}
+    ${cc([[62, 63, 57, 58], [57, 58, 52, 53], [51, 52, 49.5, 50.3], [51, 59, 50.5, 58.5]], "<b>샛별형</b> 장대음봉 → 작은 봉(갭) → 장대양봉")}
+    ${cc([[40, 41.5, 39, 41], [41, 45.5, 40.5, 45], [44.6, 49.5, 44, 49], [48.7, 53.5, 48, 53]], "<b>적삼병</b> 종가가 계속 높아지는 양봉 3개")}
+    ${cc([[45, 46, 44, 45.5], [45.5, 53, 45, 52.5], [53, 56, 52, 55.5], [56, 56.5, 44, 44.5]], "<b>하락장악형</b> 상승 끝에서 앞 양봉을 감싸는 음봉")}</div>`;
+
+  // 골든·데드크로스 (20일선·60일선)
+  const gcC = walk([[0, 56], [60, 64], [85, 74], [118, 52], [140, 48], [168, 66], [196, 82]], 1.1, 11), gm20 = ma(gcC, 20), gm60 = ma(gcC, 60);
+  const gOff = 72, gC = gcC.slice(gOff), g20 = gm20.slice(gOff), g60 = gm60.slice(gOff);
+  const dci = crossAt(g60, g20, 0, 1), gci = crossAt(g20, g60, Math.max(dci, 0) + 1, 1);
+  const fGC = fig2({ c: ohlc(gC, .9, 5), ln: [[g20, S2, 1.6], [g60, S1, 2]], pt: [...(dci > 0 ? [[dci, g20[dci], 1]] : []), ...(gci > 0 ? [[gci, g20[gci], 2, 1]] : [])] });
+
+  // 이평선 지지와 눌림목
+  const pbC = Array.from({ length: 80 }, (_, i) => +(40 + .42 * i + 3.6 * Math.sin(i / 3.3) + (i % 5 - 2) * .25).toFixed(2)), pb20 = ma(pbC, 20);
+  const pbPts = []; for (let i = 25; i < 79; i++) if (pbC[i] < pbC[i - 1] && pbC[i] <= pbC[i + 1] && pbC[i] - pb20[i] < 1.4) pbPts.push(i);
+  const fPB = fig2({ c: ohlc(pbC.slice(20), .7, 9), ln: [[pb20.slice(20), S1, 2]], pt: pbPts.slice(0, 4).map((i, k) => [i - 20, pbC[i] - 1, k + 1, 1]) });
+
+  // 빗각 그리기: 기준점은 선에 정확히 닿고, 두 점 사이 어떤 봉도 선을 뚫지 않는다
+  function tline(side, n, a0, step, k, slope, base, brk, seed) {
+    const L = i => base + slope * (i - a0), anc = Array.from({ length: k }, (_, j) => a0 + j * step), r = rnd(seed), sg = side === "up" ? 1 : -1;
+    const cl = Array.from({ length: n }, (_, i) => { if (i < brk) { const ph = ((i - a0) % step + step) % step / step; return +(L(i) + sg * (1.4 + 4.2 * Math.sin(Math.PI * ph) + (r() - .5) * .6)).toFixed(2); }
+      return +(L(i) - sg * (1.2 + (i - brk) * 1.3)).toFixed(2); });
+    const B = ohlc(cl, .7, seed + 1);
+    B.forEach((b, i) => { if (i < anc[0] || i >= brk) return; const l = L(i), isA = anc.includes(i);
+      if (side === "up") { b[2] = isA ? l : Math.max(b[2], l + .35); if (Math.min(b[0], b[3]) < b[2] + .15) { b[0] = Math.max(b[0], b[2] + .2); b[3] = Math.max(b[3], b[2] + .25); } b[1] = Math.max(b[1], b[0], b[3]); }
+      else { b[1] = isA ? l : Math.min(b[1], l - .35); if (Math.max(b[0], b[3]) > b[1] - .15) { b[0] = Math.min(b[0], b[1] - .2); b[3] = Math.min(b[3], b[1] - .25); } b[2] = Math.min(b[2], b[0], b[3]); } });
+    return { B, L, anc };
+  }
+  const T1 = tline("up", 28, 3, 6, 4, .95, 40, 24, 17);
+  const fUT = fig2({ c: T1.B, seg: [[3, T1.L(3), 27, T1.L(27), S1]], pt: [...T1.anc.map((i, j) => [i, T1.L(i), j + 1, 1]), [25, T1.B[25][2], T1.anc.length + 1, 1]] });
+  const T2 = tline("dn", 22, 2, 5, 3, -1.25, 80, 15, 23);
+  T2.B[15] = [T2.L(15) - 2, T2.L(15) + 3.4, T2.L(15) - 2.4, T2.L(15) + 3]; for (let i = 16; i < 22; i++) { const c0 = T2.B[i - 1][3] + (i % 2 ? 1.2 : -.4); T2.B[i] = [T2.B[i - 1][3], c0 + 1, Math.min(T2.B[i - 1][3], c0) - .8, c0]; }
+  const fDT = fig2({ c: T2.B, seg: [[2, T2.L(2), 18, T2.L(18), S1]], vol: null, pt: [...T2.anc.map((i, j) => [i, T2.L(i), j + 1]), [15, T2.B[15][2], 4, 1]] });
+
+  // 채널
+  const chC = Array.from({ length: 50 }, (_, i) => +(30 + .5 * i + 4.2 * Math.sin(i / 2.6)).toFixed(2));
+  const CHB = ohlc(chC, .6, 8), chLo = Math.min(...CHB.map((b, i) => b[2] - .5 * i)), chHi = Math.max(...CHB.map((b, i) => b[1] - .5 * i));
+  const fCH = fig2({ c: CHB, seg: [[0, chLo, 49, chLo + .5 * 49, S1], [0, chHi, 49, chHi + .5 * 49, S1, 1]] });
+
+  // 갭 4종
+  const GP = [];
+  const pushB = (o, h, l, c) => GP.push([o, h, l, c]);
+  [[31, 32, 30, 31.5], [31.5, 33, 31, 32.2], [32, 32.6, 30.4, 30.8], [31, 32.8, 30.6, 32.4], [32.2, 32.9, 31.2, 31.6], [31.8, 33.4, 31.4, 33]].forEach(b => pushB(...b));
+  pushB(35.6, 39, 35.4, 38.6); pushB(38.4, 40.2, 37.6, 39.8); pushB(39.6, 41.6, 39, 41.2); pushB(41, 43.8, 40.6, 43.4);
+  pushB(45.8, 48.6, 45.4, 48.2); pushB(48, 50.6, 47.4, 50.2); pushB(50, 52.6, 49.4, 52.3); pushB(52.2, 54.6, 51.8, 54.4);
+  pushB(57, 58.6, 56.6, 57.4); pushB(55, 55.6, 52.6, 53); pushB(53.2, 53.8, 50.4, 50.8); pushB(50.6, 51.4, 48.6, 49.2); pushB(49.4, 50.2, 47.4, 48);
+  const gN = GP.length - 1;
+  const fGP = fig2({ c: GP, zone: [[6, gN, 33.4, 35.4, UP], [10, gN, 43.8, 45.4, UP], [14, 15, 54.6, 56.6, UP, 1]], pt: [[6, 35.4, 1, 1], [10, 45.4, 2, 1], [14, 58.6, 3], [15, 52.6, 4, 1]] });
+
+  // 볼린저밴드 — 스퀴즈 후 돌파
+  const bbC = walk([[0, 50], [12, 56], [22, 50], [50, 52], [62, 64], [75, 66]], .55, 21), bbM = ma(bbC, 20), bbS = sdv(bbC, 20);
+  const bbU = bbM.map((m, i) => m == null ? null : m + 2 * bbS[i]), bbL = bbM.map((m, i) => m == null ? null : m - 2 * bbS[i]);
+  const bO = 19, fBB = fig2({ c: ohlc(bbC.slice(bO), .5, 2), band: [[bbU.slice(bO), bbL.slice(bO), S3]], ln: [[bbM.slice(bO), S3, 1.3, 1], [bbU.slice(bO), S3, 1], [bbL.slice(bO), S3, 1]], zone: [[14, 30, 49.5, 54, S2, 1]], pt: [[33, 60, 2]] });
+
+  // MACD
+  const mdC = walk([[0, 70], [30, 50], [42, 47], [60, 58], [80, 72], [95, 66]], .8, 31), mdM = ema(mdC, 12).map((v, i) => v - ema(mdC, 26)[i]), mdS = ema(mdM, 9), mdH = mdM.map((v, i) => v - mdS[i]);
+  const mO = 26, mgc = crossAt(mdM.slice(mO), mdS.slice(mO), 5, 1), m0 = crossAt(mdM.slice(mO), mdM.slice(mO).map(() => 0), Math.max(mgc, 0) + 1, 1);
+  const fMD = fig2({ c: ohlc(mdC.slice(mO), .8, 6), r: 66, h: 140, sub: { h: 70, ln: [[mdM.slice(mO), S1, 1.6], [mdS.slice(mO), S2, 1.4]], bars: mdH.slice(mO), hl: [[0, "0선", "var(--muted)"]], pt: [...(mgc > 0 ? [[mgc, mdM[mgc + mO], 1]] : []), ...(m0 > 0 ? [[m0, 0, 2]] : [])], lab: "MACD" } });
+
+  // 일목균형표
+  const ikC = walk([[0, 82], [60, 54], [92, 46], [112, 50], [142, 66], [172, 74]], .9, 41);
+  const tenkan = hhv(ikC, 9).map((h, i) => h == null ? null : (h + llv(ikC, 9)[i]) / 2), kijun = hhv(ikC, 26).map((h, i) => h == null ? null : (h + llv(ikC, 26)[i]) / 2);
+  const spA = sh(tenkan.map((t, i) => t == null || kijun[i] == null ? null : (t + kijun[i]) / 2), 26), spB = sh(hhv(ikC, 52).map((h, i) => h == null ? null : (h + llv(ikC, 52)[i]) / 2), 26);
+  const iO = 80, ikA = spA.slice(iO), ikB = spB.slice(iO), ikc = ikC.slice(iO);
+  const cloudTop = ikA.map((a, i) => a == null || ikB[i] == null ? null : Math.max(a, ikB[i])), cloudBot = ikA.map((a, i) => a == null || ikB[i] == null ? null : Math.min(a, ikB[i]));
+  let ikx = -1; for (let i = 1; i < ikc.length; i++) if (cloudTop[i] != null && ikc[i - 1] <= cloudTop[i - 1] && ikc[i] > cloudTop[i]) { ikx = i; break; }
+  const fIK = fig2({ c: ohlc(ikc, .7, 12), band: [[cloudTop, cloudBot, S3]], ln: [[ikA, S3, 1], [ikB, S4, 1], [tenkan.slice(iO), S2, 1.2], [kijun.slice(iO), S1, 1.4]], pt: ikx > 0 ? [[ikx, ikc[ikx], 1, 1]] : [] });
+
+  // 다이버전스 — 주가는 저점을 낮추는데 RSI는 저점을 높임
+  const dvC = [...walk([[0, 62], [10, 64], [24, 50], [28, 49], [36, 58], [52, 47.5], [58, 49], [76, 62]], .9, 51)];
+  const dvR = rsiOf(dvC), dO = 14, dvc = dvC.slice(dO), dvr = dvR.slice(dO);
+  const mn = (a, s, e) => { let k = s; for (let i = s; i <= e; i++) if (a[i] < a[k]) k = i; return k; };
+  const l1 = mn(dvc, 6, 16), l2 = mn(dvc, 30, 42), r1 = mn(dvr, Math.max(l1 - 8, 0), l1 + 3), r2 = mn(dvr, l2 - 4, l2 + 3);
+  const fDV = fig2({ c: ohlc(dvc, .5, 14), r: 66, h: 140, seg: [[l1, dvc[l1] - .6, l2, dvc[l2] - .6, DN]], sub: { h: 70, lo: 0, hi: 100, ln: [[dvr, S3, 1.6]], hl: [[70, "70", UP], [30, "30", DN]], seg: [[r1, dvr[r1], r2, dvr[r2], UP]], lab: "RSI" } });
+
+  // 엔벨로프
+  const evC = walk([[0, 60], [14, 63], [26, 54], [32, 52], [44, 60], [60, 64]], .7, 61), ev20 = ma(evC, 20);
+  const eO = 19, eU = ev20.slice(eO).map(v => v * 1.1), eL = ev20.slice(eO).map(v => v * .9), evc = evC.slice(eO);
+  let evT = -1; evc.forEach((v, i) => { if (evT < 0 && v <= eL[i] * 1.01) evT = i; });
+  const fEV = fig2({ c: ohlc(evc, .6, 7), ln: [[ev20.slice(eO), S3, 1.3, 1], [eU, S2, 1.2], [eL, S2, 1.2]], pt: evT >= 0 ? [[evT, evc[evT] - .5, 1, 1]] : [] });
+
+  // 추세 4단계와 추세 템플릿 (종가선 + 50·150·200일선)
+  const stC = walk([[0, 80], [100, 55], [300, 52], [330, 58], [420, 95], [470, 110], [520, 100], [560, 80]], 1.5, 71);
+  const s50 = ma(stC, 50), s150 = ma(stC, 150), s200 = ma(stC, 200), sO = 200, st_ = a => a.slice(sO);
+  const fST = fig2({ c: st_(stC), ln: [[st_(s50), S2, 1.4], [st_(s150), S1, 1.6], [st_(s200), S4, 1.8]],
+    pt: [[55, 60, 1], [190, 92, 2, 1], [292, 116, 3], [350, 78, 4, 1]] });
+
+  // 수급 — 외국인 누적 순매수가 먼저 오르고 주가가 뒤따름
+  const fxC = walk([[0, 50], [30, 48], [45, 49], [70, 60], [90, 66]], .8, 81), fxN = walk([[0, 0], [20, -4], [32, 4], [60, 30], [90, 36]], 1.2, 82);
+  const fFX = fig2({ c: fxC, r: 66, h: 140, sub: { h: 70, ln: [[fxN, S1, 1.8]], hl: [[0, "0", "var(--muted)"]], lab: "외국인 누적" }, pt: [[30, 47, 1, 1], [62, 60, 2]] });
+
+  // 공매도 — 대차잔고가 쌓이며 하락, 잔고 감소(숏커버링)와 함께 반등
+  const ssC = walk([[0, 70], [40, 52], [55, 50], [80, 64]], .7, 91), ssB = walk([[0, 2], [40, 6.5], [55, 6.8], [80, 3.2]], .12, 92);
+  const fSS = fig2({ c: ssC, r: 66, h: 140, sub: { h: 70, ln: [[ssB, S4, 1.8]], lab: "대차잔고" }, pt: [[30, 56, 1], [60, 52, 2, 1]] });
+
+  // 1차·2차 목표와 손절
+  const tg = [40, 42, 41, 44, 43, 46, 45, 48, 47, 50];
+  const fTG = fig2({ c: ohlc(tg, .8, 1), r: 66, h: 170, zone: [[9, 9, 50, 70, UP], [9, 9, 44, 50, DN]], hl: [[70, "2차 목표", UP, 1], [57, "1차 목표", UP, 1], [50, "매수가", "var(--ink)"], [44, "손절가", DN, 1]] });
+
+  // 지속 패턴
+  const cont = `<div class="efigs four">${shape([[0, 10], [30, 75], [40, 66], [48, 72], [58, 62], [66, 68], [76, 58], [100, 96]], null, "<b>상승 깃발형</b> 급등 뒤 살짝 내려가는 짧은 통로")}${shape([[0, 15], [30, 80], [44, 62], [56, 76], [66, 66], [74, 72], [80, 69], [100, 98]], null, "<b>페넌트</b> 급등 뒤 작은 삼각형으로 수렴")}${shape([[0, 20], [20, 60], [34, 46], [52, 76], [64, 66], [78, 84], [88, 80], [100, 50]], null, "<b>상승 쐐기</b> 고점·저점이 좁아지며 오르다 아래로 이탈")}${shape([[0, 30], [16, 70], [30, 40], [46, 70], [60, 40], [76, 70], [90, 42], [100, 92]], [0, 70, 100, 70], "<b>박스권 돌파</b> 같은 범위를 오가다 상단 돌파")}</div>`;
+
   const L5 = "var(--s2)", L20 = "var(--s1)";
   return [
     { t: "캔들 읽기", s: "봉 하나에 담긴 시가·고가·저가·종가",
@@ -2176,6 +2358,12 @@ const EF = (() => {
         <p>봉 하나가 하루면 일봉, 일주일이면 주봉, 한 달이면 월봉입니다. 종목 화면의 차트 상단에서 바꿔 볼 수 있습니다. 일봉은 단기 흐름, 주봉·월봉은 큰 추세를 볼 때 씁니다. 일봉이 복잡해 보이면 주봉부터 보는 습관이 도움이 됩니다.</p>`,
       terms: [["장대양봉·장대음봉", "몸통이 긴 봉. 한쪽 힘이 강하게 우세했다는 뜻입니다."], ["망치형", "아래꼬리가 긴 봉. 장중에 크게 밀렸다가 매수세가 받아낸 모습으로, 하락 뒤에 나오면 반등 신호로 봅니다."], ["역망치형·유성형", "위꼬리가 긴 봉. 올랐다가 매물에 밀린 모습입니다. 상승 뒤 고점에서 나오면 유성형이라 부르고 경계 신호로 봅니다."], ["도지", "시가와 종가가 거의 같은 봉. 사려는 힘과 팔려는 힘이 팽팽하다는 뜻이라 추세가 바뀌는 자리에서 자주 나옵니다."]],
       sig: ["vol_bull", "hammer", "shooting", "bull_engulf", "morning_star", "doji_top"] },
+    { t: "캔들 조합", s: "봉 2~3개가 만드는 반전·지속 신호",
+      fig: cmb,
+      body: `<p>캔들 하나보다 2~3개가 이어진 모양이 더 많은 것을 알려줍니다. 핵심은 <b>어디에서</b> 나왔느냐입니다. 같은 상승장악형이라도 긴 하락 끝 지지선에서 나오면 의미가 크고, 횡보 중간에서 나오면 의미가 작습니다.</p>
+        <p>상승장악형·샛별형·관통형은 하락을 멈추는 반전 신호, 하락장악형·석별형·먹구름형은 상승을 멈추는 반전 신호입니다. 적삼병·상승삼법은 오르는 힘이 이어지는 지속 신호입니다. 반전 신호는 다음 날 그 방향으로 한 번 더 움직이는지(확인 봉)를 보고 판단하는 편이 안전합니다.</p>`,
+      terms: [["상승장악형", "앞 음봉의 몸통을 다음 양봉 몸통이 완전히 감싸는 모양."], ["샛별형·석별형", "장대봉 → 갭을 둔 작은 봉 → 반대 방향 장대봉. 바닥이면 샛별, 천장이면 석별."], ["관통형·먹구름형", "음봉 다음 양봉이 앞 음봉 몸통 절반 위까지 올라오면 관통형, 반대가 먹구름형."], ["잉태형", "큰 봉 안에 다음 작은 봉이 들어가는 모양. 추세가 힘을 잃었다는 신호."], ["적삼병·흑삼병", "같은 방향 장대봉 3개가 연속으로 나오는 것."]],
+      sig: ["bull_engulf", "bear_engulf", "morning_star", "evening_star", "three_white", "three_black", "piercing", "dark_cloud", "harami_bull"] },
     { t: "거래량과 기준봉", s: "가격을 움직인 힘의 크기",
       fig: wrap(f2, "① 평소 5배가 넘는 거래량을 동반한 장대양봉이 기준봉입니다. ② 이후 눌림이 기준봉 중심값(시가와 종가의 중간) 근처에서 멈추고 다시 오릅니다."),
       body: `<p>거래량은 그 가격 움직임에 얼마나 많은 돈이 참여했는지를 보여줍니다. 거래량이 늘면서 오르는 상승은 힘이 있고, 거래량이 줄면서 오르는 상승은 힘이 빠지는 중일 수 있습니다. 반대로 하락할 때 거래량이 마르는 것은 팔 사람이 줄었다는 뜻으로 해석합니다.</p>
@@ -2185,45 +2373,138 @@ const EF = (() => {
     { t: "이동평균선", s: "평균 가격으로 보는 추세의 방향",
       fig: wrap(f3, "① 5일선이 20일선을 아래에서 위로 뚫는 골든크로스. 이후 단기선이 장기선 위에 놓이는 정배열로 바뀝니다.", [[L5, "5일선"], [L20, "20일선"]]),
       body: `<p>이동평균선은 최근 며칠간 종가의 평균을 이은 선입니다. 5일선은 일주일, 20일선은 한 달, 60일선은 석 달, 120일선은 반년 평균 가격입니다. 주가가 평균선 위에 있으면 그 기간 동안 산 사람들이 대체로 수익 중이고, 아래 있으면 손실 중이라는 뜻입니다.</p>
+        <p>선마다 역할이 다릅니다. <b>5일선</b>은 단기 매매자의 평균 가격이라 급등주의 생명선, <b>20일선</b>은 한 달 평균이라 스윙 매매의 기준선, <b>60일선</b>은 분기 실적 주기와 맞물려 중기 추세선, <b>120일선</b>은 경기선, <b>200일(240일)선</b>은 1년 평균이라 장기 추세의 기준으로 씁니다. 해외에서는 50·150·200일선, 국내에서는 5·20·60·120·240일선을 주로 봅니다.</p>
         <p>짧은 선이 위, 긴 선이 아래로 차례대로 놓인 상태를 정배열이라 하고 상승 추세로 봅니다. 반대 순서는 역배열입니다. 상승 추세 중 주가가 20일선 근처까지 내려왔다가 다시 오르는 자리를 눌림목이라 부릅니다. 이동평균은 지난 가격의 평균이라 늘 한발 늦습니다. 교차 신호가 나왔을 때는 이미 주가가 꽤 움직인 뒤인 경우가 많습니다.</p>`,
       terms: [["골든크로스", "짧은 이동평균선이 긴 선을 아래에서 위로 뚫는 것."], ["데드크로스", "짧은 선이 긴 선을 위에서 아래로 뚫는 것."], ["정배열·역배열", "5·20·60·120일선이 짧은 순서대로 위에 있으면 정배열, 반대면 역배열."], ["눌림목", "상승 추세 중 일시적으로 쉬어가는 자리. 보통 5일선이나 20일선 부근."]],
-      sig: ["gc", "dc", "align_on", "ma20_sup", "pullback", "ma60_up"] },
-    { t: "추세와 추세선(빗각)", s: "고점과 저점이 그리는 방향",
-      fig: wrap(f4, "①②③ 점점 낮아지는 고점을 이으면 하락 추세선(하락 빗각)이 됩니다. ④ 거래량을 동반해 종가로 이 선 위에 올라서면 하락 추세가 끝날 가능성을 봅니다."),
+      sig: ["align_on", "align_off", "ma20_up", "ma20_dn", "ma60_up", "ma120_up", "ma240_up", "ma20_turn"] },
+    { t: "골든크로스·데드크로스", s: "평균선이 교차하는 순간",
+      fig: wrap(fGC, "① 20일선이 60일선을 위에서 아래로 뚫는 데드크로스 뒤 하락이 이어집니다. ② 바닥을 다진 뒤 20일선이 60일선을 아래에서 위로 뚫는 골든크로스가 나오고 상승 추세로 바뀝니다.", [[S2, "20일선"], [S1, "60일선"]]),
+      body: `<p>골든크로스는 짧은 기간 평균 가격이 긴 기간 평균 가격을 넘어서는 순간입니다. 최근에 산 사람들의 평균 단가가 오래 들고 있던 사람들보다 높아졌다는 뜻이라, 사려는 힘이 우위로 돌아섰다고 해석합니다. 데드크로스는 그 반대입니다.</p>
+        <p>어떤 선끼리 교차했는지에 따라 무게가 다릅니다. 5일선·20일선 교차(단기)는 자주 나오고 속임수도 많습니다. 20일선·60일선(중기), 60일선·120일선(장기) 교차는 드물지만 추세 전환의 신뢰도가 높습니다. 다만 평균선은 늘 늦게 움직이기 때문에 교차가 나왔을 때는 이미 바닥에서 꽤 오른 뒤입니다.</p>
+        <p>신뢰도를 높이는 조건은 세 가지입니다. 긴 선(60일선)이 더는 내려가지 않고 고개를 들 것, 교차하는 날 거래량이 늘 것, 주가가 두 선 위에서 마감할 것. 긴 선이 계속 내려가는 중에 나온 골든크로스는 반등에 그치는 경우가 많습니다.</p>`,
+      terms: [["단기 골든크로스", "5일선이 20일선을 상향 돌파."], ["중기 골든크로스", "20일선이 60일선을 상향 돌파."], ["장기 골든크로스", "60일선이 120일선을 상향 돌파. 대세 상승 전환 신호로 봅니다."], ["속임수(휩소)", "교차 직후 다시 반대로 교차하는 것. 횡보장에서 자주 나옵니다."]],
+      sig: ["gc", "dc", "gc_long", "dc_long", "gc_120", "dc_120", "ma_conv_up"] },
+    { t: "이평선 지지와 눌림목", s: "오르는 주식을 싸게 사는 자리",
+      fig: wrap(fPB, "상승 추세에서 주가가 20일선 근처까지 내려왔다가(①~④) 다시 오릅니다. 20일선이 계속 위를 향하는 동안은 이 자리가 반복됩니다.", [[S1, "20일선"]]),
+      body: `<p>상승 추세의 주식도 매일 오르지는 않습니다. 오르고, 쉬고, 다시 오르기를 반복합니다. 쉬는 동안 주가가 이동평균선 근처까지 내려오는 자리를 눌림목이라 부릅니다. 추세를 따르는 매매에서 가장 많이 쓰는 매수 자리입니다.</p>
+        <p>어떤 선에서 받치는지는 종목의 힘에 따라 다릅니다. 아주 강한 종목은 5일선·10일선, 보통 상승 종목은 20일선, 큰 조정이면 60일선까지 내려옵니다. 지지를 확인하는 방법은 거래량입니다. 내려올 때 거래량이 줄고, 평균선에서 반등할 때 거래량이 다시 늘면 좋은 눌림목입니다. 종가가 평균선 아래로 마감하고 다음 날도 회복하지 못하면 지지가 깨진 것으로 봅니다.</p>`,
+      terms: [["지지 이평선", "주가가 반복해서 반등하는 이동평균선. 종목마다 다르므로 과거에 어느 선에서 받쳤는지 확인합니다."], ["이격도", "주가가 이동평균선에서 얼마나 떨어져 있는지(%). 너무 멀어지면 평균선 쪽으로 돌아오려는 힘이 생깁니다."]],
+      sig: ["ma5_sup", "ma10_sup", "ma20_sup", "ma60_sup", "ma120_sup", "pullback", "ma20_rej", "ma60_rej"] },
+    { t: "추세선과 하락 빗각", s: "낮아지는 고점을 이은 저항선",
+      fig: wrap(fDT, "①②③ 점점 낮아지는 고점을 이으면 하락 추세선(하락 빗각)이 됩니다. 세 고점 모두 선에 정확히 닿고, 그 사이 어떤 봉도 선을 넘지 않습니다. ④ 종가로 이 선 위에 올라서면 하락 추세가 끝날 가능성을 봅니다.", [[S1, "하락 빗각"]]),
       body: `<p>고점과 저점이 함께 높아지면 상승 추세, 함께 낮아지면 하락 추세입니다. 두 개 이상의 저점을 이은 선이 상승 추세선, 고점을 이은 선이 하락 추세선입니다. 유튜브 등에서 말하는 빗각은 이렇게 비스듬히 그은 추세선을 가리킵니다.</p>
-        <p>선에 닿는 점이 많을수록 신뢰도가 높습니다. 장중에 잠깐 뚫은 것보다 종가 기준으로 넘어선 것을 돌파로 봅니다. 상승 추세선을 종가로 이탈하면 추세가 꺾였을 수 있다는 경고입니다. 추세선은 긋는 사람에 따라 달라지기 때문에, 이 사이트는 정해진 규칙(주요 고점과 그다음 낮아진 고점)으로 자동으로 그립니다.</p>`,
+        <p>선에 닿는 점이 많을수록 신뢰도가 높습니다. 장중에 잠깐 뚫은 것보다 종가 기준으로 넘어선 것을 돌파로 봅니다. 상승 추세선을 종가로 이탈하면 추세가 꺾였을 수 있다는 경고입니다. 추세선은 긋는 사람에 따라 달라지기 때문에, 이 사이트는 아래 규칙으로 자동으로 그립니다.</p>
+        <ul class="eul"><li><b>기준점(피벗)</b> 앞뒤 5개 봉 중 가장 높은 고가(하락 빗각) 또는 가장 낮은 저가(상승 빗각)인 봉.</li>
+        <li><b>두 점 잇기</b> 8봉 이상 떨어진 피벗 두 개를 잇되, 하락 빗각은 두 번째 고점이 더 낮아야 합니다.</li>
+        <li><b>통과 금지</b> 두 점 사이의 어떤 봉도 선을 뚫으면 안 됩니다. 뚫는 선은 추세선이 아닙니다.</li>
+        <li><b>접점</b> 선에서 0.4% 안쪽까지 닿은 봉의 수. 많을수록 많은 사람이 의식하는 선입니다.</li>
+        <li><b>돌파·이탈</b> 종가가 선을 1% 넘게 벗어나면 돌파(이탈)로 봅니다. 장중에만 뚫고 종가가 돌아오면 돌파가 아닙니다.</li></ul>`,
       terms: [["채널", "추세선과 평행한 선을 반대편 고점(저점)에 그어 만든 통로."], ["N자형 상승", "오르고, 일부 되돌리고, 다시 전 고점을 넘는 흐름. 상승 추세의 기본 모양입니다."]],
       sig: ["tl_dn_brk", "tl_up_sup", "tl_up_brk", "n_wave", "prev_low_brk"] },
+    { t: "상승 빗각과 이탈", s: "높아지는 저점을 이은 지지선",
+      fig: wrap(fUT, "①②③④ 점점 높아지는 저점을 이으면 상승 빗각(상승 추세선)이 됩니다. 접점이 많을수록 강한 선입니다. ⑤ 종가로 이 선 아래에 마감하면 상승 추세가 꺾였다는 경고입니다.", [[S1, "상승 빗각"]]),
+      body: `<p>상승 빗각은 높아지는 저점들을 이은 선입니다. 주가가 이 선에 닿을 때마다 사는 사람이 나타났다는 뜻이라, 선 위에 있는 동안은 상승 추세가 살아 있다고 봅니다. 세 번째 접점에서 반등하면 선의 신뢰도가 크게 올라갑니다.</p>
+        <p>선의 기울기도 중요합니다. 너무 가파른 선(45도보다 훨씬 급한 선)은 오래 유지되기 어려워 곧 깨지고, 더 완만한 새 선이 생깁니다. 이 경우 추세가 끝난 것이 아니라 속도가 느려진 것일 수 있습니다. 반면 완만한 장기 상승 빗각까지 종가로 깨지면 추세 전환 가능성이 높습니다. 이탈 뒤 다시 선 아래쪽에서 막히면(리테스트 실패) 확인 신호입니다.</p>`,
+      terms: [["추세선 기울기", "가파를수록 깨지기 쉽고, 완만할수록 오래 유지됩니다."], ["팬 원리", "가파른 선이 깨지면 더 완만한 두 번째·세 번째 선이 생기며, 세 번째 선까지 깨지면 추세 전환으로 봅니다."]],
+      sig: ["tl_up_sup", "tl_up_brk", "tl_dn_rej", "tl_dn_brk"] },
+    { t: "채널", s: "추세가 오가는 통로",
+      fig: wrap(fCH, "아래 실선은 저점을 이은 상승 추세선, 위 점선은 같은 기울기로 고점에 맞춘 평행선입니다. 주가는 이 통로 안에서 오르내립니다.", [[S1, "채널"]]),
+      body: `<p>추세선을 그은 뒤 반대편 고점(또는 저점)에 같은 기울기의 선을 그으면 채널이 됩니다. 상승 채널에서는 아래 선이 매수 구간, 위 선이 차익 실현 구간이 됩니다.</p>
+        <p>채널 위 선을 강하게 뚫으면 추세가 더 가팔라진다는 신호(가속), 위 선에 닿지도 못하고 꺾이면 힘이 약해졌다는 신호입니다. 채널 아래 선을 종가로 이탈하면 상승 빗각 이탈과 같은 의미입니다.</p>`,
+      terms: [["상승·하락·수평 채널", "기울기에 따라 나뉩니다. 수평 채널이 곧 박스권입니다."]], sig: ["n_wave", "box_up", "box_dn"] },
     { t: "지지와 저항", s: "멈추는 가격대와 막히는 가격대",
       fig: wrap(f5, "① 같은 가격대에서 여러 번 막히면 저항입니다. ② 이 저항을 뚫고 올라선 뒤 ③ 다시 내려와 그 가격에서 받치면, 저항이 지지로 바뀐 것입니다."),
       body: `<p>지지는 주가가 내려오다 멈추는 가격대, 저항은 올라가다 막히는 가격대입니다. 그 가격에서 사고팔려는 사람이 많기 때문에 생깁니다. 대표적인 것이 전고점·전저점, 거래가 많이 쌓인 가격대(매물대), 갭, 그리고 1만 원·10만 원 같은 딱 떨어지는 가격입니다.</p>
         <p>매물대는 과거에 많은 사람이 산 가격대입니다. 주가가 그 아래 있으면 본전에 팔려는 물량 때문에 저항이 되고, 위에 있으면 그 가격을 지키려는 매수 때문에 지지가 됩니다. 종목 화면 차트의 매물대 막대가 이 가격대를 보여줍니다. 저항을 돌파한 뒤 다시 그 가격까지 내려와 지지받는 과정을 리테스트라고 하며, 돌파가 진짜인지 확인하는 자리로 봅니다.</p>`,
       terms: [["전고점 돌파", "직전 의미 있는 고점을 종가로 넘어서는 것."], ["갭", "전날 고가보다 높게(또는 저가보다 낮게) 시작해 차트에 빈 공간이 생긴 것. 메워지지 않은 갭은 지지·저항으로 작용합니다."], ["박스권", "일정한 위아래 범위 안에서 오르내리는 구간."]],
       sig: ["prev_high_brk", "retest", "box_up", "gap_sup", "hi52", "prev_low_sup"] },
+    { t: "갭", s: "차트의 빈 공간이 말해 주는 것",
+      fig: wrap(fGP, "① 돌파갭: 오랜 횡보를 벗어나며 생긴 갭. ② 진행갭: 상승 중간에 다시 생긴 갭. 칠해진 구간은 아직 메워지지 않은 갭으로, 되돌림 때 지지가 됩니다. ③ 소멸갭: 상승 끝에 생겼다가 ④ 곧 메워지며 하락 전환(점선은 메워진 갭)."),
+      body: `<p>갭은 전날 고가보다 오늘 저가가 높게(상승 갭) 또는 전날 저가보다 오늘 고가가 낮게(하락 갭) 거래돼 차트에 빈 공간이 생긴 것입니다. 그 가격대에서는 거래가 한 건도 없었다는 뜻이라, 나중에 주가가 돌아오면 지지나 저항으로 작용합니다.</p>
+        <p>갭은 나온 위치에 따라 네 가지로 나눕니다. <b>보통갭</b>은 횡보 중에 생겨 며칠 안에 메워지고 의미가 작습니다. <b>돌파갭</b>은 박스권이나 저항선을 뚫으며 생기는 갭으로 새 추세의 시작이며 잘 메워지지 않습니다. <b>진행갭(급진갭)</b>은 추세 중간에 나와 추세가 아직 절반쯤 남았다는 신호로 봅니다. <b>소멸갭</b>은 추세 막바지에 마지막 힘으로 생겼다가 곧 메워지는 갭으로, 메워지는 순간이 추세 전환 신호입니다.</p>
+        <p>종목 화면 차트의 갭 표시는 최근 1년 안에 생긴 0.2% 이상의 갭입니다. 칠해진 상자는 아직 남은 갭 구간(메워진 만큼 줄어듭니다), 점선 상자는 120일 안에 다 메워진 갭입니다.</p>`,
+      terms: [["갭 메우기", "주가가 되돌아와 갭 구간을 다시 거래하는 것. 일부만 들어오면 부분 메움."], ["섬꼴 반전", "상승 갭과 하락 갭 사이에 봉 몇 개가 섬처럼 떨어져 남는 모양. 강한 반전 신호입니다."], ["시가 갭", "시가만 갭으로 시작하고 장중에 메워진 경우. 차트상 빈 공간이 남지 않아 갭으로 치지 않습니다."]],
+      sig: ["gap_up", "gap_down", "gap_sup", "gap_fill_up", "island_bot", "island_top"] },
     { t: "가격조정과 기간조정", s: "오른 주식이 쉬어가는 두 가지 방식",
       fig: `<div class="efigs">${wrap(f6a, "가격조정: 오른 폭의 일부를 되돌립니다. 보통 38.2%·50%·61.8% 되돌림 구간에서 지지 여부를 봅니다.")}${wrap(f6b, "기간조정: 가격은 크게 빠지지 않고 옆으로 움직이며 시간을 보냅니다. 박스 상단을 넘으면 다시 상승을 봅니다.")}</div>`,
       body: `<p>크게 오른 주식은 언젠가 쉬어갑니다. 가격이 눈에 띄게 빠지면서 쉬는 것을 가격조정, 가격은 별로 안 빠지고 시간이 흐르며 쉬는 것을 기간조정이라 합니다. 매수세가 강한 종목일수록 깊게 빠지지 않고 기간조정으로 쉬는 경우가 많습니다.</p>
         <p>피보나치 되돌림은 상승폭에서 얼마나 되돌렸는지를 비율로 보는 방법입니다. 38.2% 안에서 멈추면 강한 조정, 50% 부근은 보통, 61.8%를 넘어 내려가면 상승 추세 자체가 약해졌다고 봅니다. 정확히 그 가격에서 멈춘다기보다 그 근처를 살펴볼 구간으로 쓰는 것이 좋습니다.</p>`,
       terms: [["되돌림", "직전 상승(하락)폭 중 반대 방향으로 움직인 비율."], ["박스 돌파", "기간조정 구간의 위쪽 끝을 종가로 넘어서는 것."]],
       sig: ["price_corr", "time_corr", "period_brk", "fib_zone", "fib_bounce", "half_off"] },
-    { t: "차트 패턴", s: "반복해서 나타나는 모양",
+    { t: "반전 패턴", s: "추세가 바뀌는 자리의 모양",
       fig: `<div class="efigs four">${shape([[0, 80], [22, 25], [42, 62], [62, 25], [100, 95]], [0, 62, 100, 62], "<b>쌍바닥(W)</b> 가운데 고점(넥라인)을 넘으면 완성")}${shape([[0, 20], [18, 65], [32, 45], [50, 88], [68, 45], [82, 65], [100, 15]], [10, 45, 92, 45], "<b>헤드앤숄더</b> 넥라인을 깨면 하락 전환")}${shape([[0, 30], [14, 88], [30, 40], [46, 78], [60, 50], [72, 70], [80, 58], [100, 95]], null, "<b>삼각수렴</b> 폭이 좁아지다 한쪽으로 돌파")}${shape([[0, 85], [15, 55], [35, 35], [55, 55], [70, 85], [78, 72], [86, 80], [100, 100]], [0, 85, 100, 85], "<b>컵앤핸들</b> 둥근 바닥 뒤 짧은 눌림")}</div>`,
       body: `<p>차트 패턴은 사람들의 심리가 비슷하게 반복되면서 생기는 모양입니다. 쌍바닥은 두 번 같은 가격에서 반등해 그 가격이 바닥이라는 확신이 생긴 모양이고, 헤드앤숄더는 세 번의 고점 중 가운데가 가장 높은 모양으로 상승 힘이 다했다는 신호로 봅니다. 이 둘을 뒤집은 쌍봉(M)과 역헤드앤숄더도 있습니다.</p>
         <p>대부분의 패턴은 넥라인이나 박스 끝을 실제로 돌파해야 완성됩니다. 모양이 만들어지는 중에 미리 사는 것은 예측이고, 돌파를 확인한 뒤 사는 것이 확인 매매입니다. 패턴은 보는 사람마다 다르게 그을 수 있어, 아래 통계도 정해진 규칙으로 찾아낸 결과입니다.</p>`,
       terms: [["넥라인", "패턴의 목에 해당하는 기준선. 쌍바닥에서는 두 바닥 사이의 고점."], ["깃발형", "급등 뒤 짧게 옆으로 쉬다가 다시 오르는 모양."], ["삼중바닥", "같은 가격대에서 세 번 반등한 바닥."]],
-      sig: ["dbl_bottom", "dbl_top", "inv_hs", "hs_top", "tri_up", "cup_handle", "flag_bull"] },
-    { t: "보조지표", s: "RSI·MACD·볼린저밴드·일목균형표",
+      sig: ["dbl_bottom", "dbl_top", "inv_hs", "hs_top", "triple_bottom", "v_rebound", "cup_handle"] },
+    { t: "지속 패턴", s: "쉬었다가 같은 방향으로 가는 모양",
+      fig: cont,
+      body: `<p>지속 패턴은 추세가 잠깐 숨을 고르는 모양입니다. 깃발형과 페넌트는 급등(깃대) 뒤 짧게 쉬는 모양으로, 쉬는 동안 거래량이 줄었다가 다시 위로 벗어날 때 거래량이 터지면 깃대 길이만큼 더 오르는 경우가 많습니다.</p>
+        <p>쐐기형은 주의가 필요합니다. 고점과 저점이 함께 높아지면서 폭이 좁아지는 상승 쐐기는 오르는 힘이 약해지는 모양이라 아래로 깨지는 경우가 많고, 반대로 함께 낮아지며 좁아지는 하락 쐐기는 위로 벗어나는 경우가 많습니다. 삼각수렴과 박스권은 방향이 정해지지 않은 상태라, 어느 쪽으로든 종가로 벗어나는 것을 확인한 뒤 따라가는 것이 원칙입니다.</p>`,
+      terms: [["깃대", "깃발형 앞의 급등 구간. 목표치를 잴 때 씁니다."], ["수렴", "고점과 저점의 폭이 점점 좁아지는 것. 좁아질수록 이후 움직임이 커집니다."]],
+      sig: ["flag_bull", "tri_up", "tri_dn", "wedge_fall", "wedge_rise", "box_up", "period_brk"] },
+    { t: "RSI와 스토캐스틱", s: "얼마나 많이 올랐나, 얼마나 많이 빠졌나",
       fig: wrap(f8, "위는 주가, 아래는 RSI입니다. RSI가 30 아래(파란 원)면 많이 빠진 상태, 70 위(빨간 원)면 많이 오른 상태로 봅니다."),
       body: `<p>보조지표는 가격과 거래량을 공식으로 가공해 현재 상태를 숫자로 보여줍니다. 계산 재료가 결국 같은 가격이기 때문에 주가보다 먼저 움직이지는 않습니다. 지금이 과열인지 침체인지, 힘이 붙는 중인지를 보조적으로 판단하는 데 씁니다.</p>
         <p>과열·침체 신호는 반대로 움직일 때도 많습니다. 강한 상승 추세에서는 RSI가 70 위에 오래 머물고, 하락 추세에서는 30 아래에 오래 머뭅니다. 그래서 RSI 30 이하에서 바로 사기보다 30을 다시 넘어설 때를 보는 방식이 더 많이 쓰입니다.</p>`,
-      terms: [["RSI", "최근 14일 동안 오른 폭이 전체 움직임에서 차지하는 비율(0~100). 70 이상 과열, 30 이하 침체."], ["MACD", "12일·26일 지수이동평균의 차이. 시그널선(9일 평균)을 위로 뚫으면 매수, 아래로 뚫으면 매도 신호로 봅니다."], ["볼린저밴드", "20일선 위아래로 변동폭(표준편차 2배)만큼 그린 띠. 띠가 좁아진 뒤(스퀴즈) 크게 움직이는 경우가 많습니다."], ["스토캐스틱", "최근 일정 기간의 최고·최저 범위 안에서 현재 가격의 위치."], ["일목균형표", "전환선·기준선·구름대로 추세를 보는 일본식 지표. 주가가 구름대 위면 강세, 아래면 약세."], ["다이버전스", "주가는 신저가인데 지표는 저점이 높아지는 것처럼 둘이 반대로 움직이는 현상."]],
-      sig: ["rsi_os", "rsi_os_exit", "macd_gc", "bb_up", "squeeze_brk", "ichi_cloud_up", "bull_div"] },
+      terms: [["RSI", "최근 14일 동안 오른 폭이 전체 움직임에서 차지하는 비율(0~100). 70 이상 과열, 30 이하 침체. 강한 상승장에서는 40~80, 하락장에서는 20~60 사이에서 움직이는 경향이 있습니다."], ["RSI 50선", "50 위는 상승 우위, 50 아래는 하락 우위. 추세 판단에는 70·30보다 50선이 더 쓸모 있습니다."], ["스토캐스틱", "최근 14일 최고가·최저가 범위 안에서 오늘 종가가 어디쯤인지(0~100). %K선이 %D선(3일 평균)을 20 아래에서 위로 뚫으면 침체권 골든크로스."], ["과매수·과매도", "단기간에 너무 많이 사거나 팔린 상태. 바로 반대로 움직인다는 뜻은 아닙니다."]],
+      sig: ["rsi_os", "rsi_ob", "sto_gc", "sto_dc", "overheat", "oversold"] },
+    { t: "다이버전스", s: "가격과 지표가 다른 말을 할 때",
+      fig: wrap(fDV, "주가는 두 번째 저점이 더 낮지만(파란 선), RSI는 두 번째 저점이 더 높습니다(빨간 선). 하락의 힘이 줄었다는 상승 다이버전스입니다."),
+      body: `<p>다이버전스는 주가와 보조지표가 반대 방향을 가리키는 현상입니다. 주가는 더 낮은 저점을 만들었는데 RSI나 MACD는 더 높은 저점을 만들면 상승 다이버전스, 주가는 더 높은 고점인데 지표는 더 낮은 고점이면 하락 다이버전스입니다.</p>
+        <p>쉽게 말하면 같은 신저가라도 떨어지는 속도가 느려졌다는 뜻입니다. 파는 힘이 약해진 것이라 반등이 나올 가능성이 커집니다. 다만 다이버전스는 "힘이 약해졌다"는 신호이지 "지금 돌아선다"는 신호가 아닙니다. 다이버전스가 두세 번 연달아 나오면서 계속 내려가는 경우도 많아, 직전 고점 돌파나 이동평균선 회복 같은 가격 신호와 함께 봅니다.</p>`,
+      terms: [["상승 다이버전스", "가격 저점↓, 지표 저점↑. 바닥 신호."], ["하락 다이버전스", "가격 고점↑, 지표 고점↓. 천장 신호."], ["히든 다이버전스", "가격 저점↑, 지표 저점↓. 상승 추세가 이어진다는 신호로 봅니다."]],
+      sig: ["bull_div", "bear_div", "obv_lead"] },
+    { t: "MACD", s: "추세의 방향과 속도",
+      fig: wrap(fMD, "아래 창의 진한 선은 MACD, 연한 선은 시그널, 막대는 둘의 차이(히스토그램)입니다. ① MACD가 시그널을 위로 뚫는 골든크로스, ② MACD가 0선 위로 올라서며 상승 추세가 확인됩니다.", [[S1, "MACD"], [S2, "시그널"]]),
+      body: `<p>MACD는 12일 지수이동평균에서 26일 지수이동평균을 뺀 값입니다. 짧은 평균이 긴 평균보다 위에 있으면 양수, 아래면 음수라 0선 위아래가 곧 상승·하락 추세를 뜻합니다. 시그널선은 MACD의 9일 평균입니다.</p>
+        <p>보는 순서는 세 단계입니다. 히스토그램 막대가 줄어들기 시작하면 추세의 속도가 느려지는 것(가장 빠른 신호), MACD가 시그널을 교차하면 방향 전환(중간), MACD가 0선을 넘으면 추세 확인(가장 늦지만 확실한 신호)입니다. 0선 아래에서 나온 골든크로스는 바닥권 반전, 0선 위에서 나온 골든크로스는 상승 추세 중 재가속으로 해석합니다.</p>`,
+      terms: [["지수이동평균(EMA)", "최근 가격에 더 큰 무게를 주는 평균. 단순 평균보다 빨리 반응합니다."], ["히스토그램", "MACD − 시그널. 막대가 커지면 추세가 빨라지고, 작아지면 느려집니다."]],
+      sig: ["macd_gc", "macd_dc"] },
+    { t: "볼린저밴드", s: "평소 움직임의 범위와 그 이탈",
+      fig: wrap(fBB, "점선 상자 구간처럼 밴드 폭이 좁아지는 것을 스퀴즈라고 합니다. 에너지가 모이는 구간이며, ② 밴드 상단을 뚫고 나가면서 큰 상승이 시작됐습니다.", [[S3, "볼린저밴드 (20일선 ± 표준편차 2배)"]]),
+      body: `<p>볼린저밴드는 20일선을 중심으로 위아래에 변동폭(표준편차)의 2배만큼 띠를 그린 것입니다. 통계적으로 주가의 약 95%가 이 띠 안에서 움직입니다. 그래서 띠 밖으로 나가는 것은 평소와 다른 일이 생겼다는 뜻입니다.</p>
+        <p>두 가지 방식으로 씁니다. 횡보하는 종목에서는 하단 근처가 매수, 상단 근처가 매도 구간입니다. 반대로 띠가 좁아진(스퀴즈) 뒤 상단을 뚫고 거래량이 실리면, 새 추세가 시작된 것으로 보고 따라갑니다. 강한 상승 추세에서는 주가가 상단을 따라 붙어 오르는 밴드 타기가 나타나므로, 상단 터치만으로 팔면 큰 상승을 놓칠 수 있습니다.</p>`,
+      terms: [["스퀴즈", "밴드 폭이 몇 달 중 가장 좁아진 상태. 곧 큰 움직임이 나올 가능성이 큽니다."], ["%B", "밴드 안에서 주가의 위치. 0은 하단, 1은 상단, 0.5는 중심선."], ["밴드 타기", "강한 추세에서 주가가 밴드 상단(하단)을 따라 계속 움직이는 것."]],
+      sig: ["squeeze", "bb_up", "bb_dn"] },
+    { t: "엔벨로프", s: "평균에서 너무 멀어졌을 때",
+      fig: wrap(fEV, "20일선 위아래 10% 선입니다. ① 주가가 하단선에 닿은 뒤 평균선 쪽으로 돌아왔습니다.", [[S2, "엔벨로프 (20일선 ±10%)"], [S3, "20일선"]]),
+      body: `<p>엔벨로프는 이동평균선 위아래로 일정한 비율(보통 20일선 ±10%, 변동이 큰 종목은 ±15~20%)만큼 선을 그은 것입니다. 볼린저밴드와 달리 폭이 고정돼 있어, 평균에서 몇 % 벗어났는지를 직관적으로 보여줍니다.</p>
+        <p>주로 낙폭과대 매매에 씁니다. 하단선에 닿으면 너무 많이 빠졌다고 보고 반등을 노리고, 상단선을 넘으면 과열로 봅니다. 그러나 하락 추세가 강한 종목은 하단선을 뚫고 계속 내려가므로, 20일선과 60일선이 함께 내려가는 종목에서는 하단 터치를 매수 근거로 쓰지 않는 것이 좋습니다.</p>`,
+      terms: [["이격 매매", "평균선과 멀어진 정도를 보고 되돌림을 노리는 매매."]], sig: ["env_low", "env_high", "half_off"] },
+    { t: "일목균형표", s: "구름대로 보는 추세와 지지",
+      fig: wrap(fIK, "칠해진 띠가 구름대(선행스팬1·2 사이)입니다. ① 주가가 구름대를 뚫고 위로 올라서며 하락 추세가 끝나고, 이후 구름대가 아래에서 지지 역할을 합니다.", [[S2, "전환선"], [S1, "기준선"], [S3, "구름대"]]),
+      body: `<p>일목균형표는 다섯 개의 선으로 추세와 지지·저항을 한눈에 보는 일본식 지표입니다. <b>전환선</b>은 최근 9일 최고가와 최저가의 중간, <b>기준선</b>은 26일 최고가와 최저가의 중간입니다. 평균 가격이 아니라 범위의 중간값이라 박스권의 가운데를 보여 줍니다.</p>
+        <p><b>구름대</b>는 선행스팬1(전환선과 기준선의 중간)과 선행스팬2(52일 최고·최저의 중간)를 26일 앞으로 당겨 그린 띠입니다. 주가가 구름대 위에 있으면 강세, 아래면 약세, 안에 있으면 방향 탐색 구간입니다. 구름이 두꺼울수록 강한 지지·저항이 됩니다. 가장 많이 쓰는 신호는 주가가 구름대를 위로 뚫는 것, 그리고 전환선이 기준선을 위로 뚫는 호전입니다.</p>`,
+      terms: [["호전·역전", "전환선이 기준선을 위로 뚫으면 호전(매수), 아래로 뚫으면 역전(매도)."], ["후행스팬", "오늘 종가를 26일 뒤로 그린 선. 26일 전 주가보다 높으면 강세."], ["구름 꼬임", "선행스팬1·2가 교차하는 지점. 추세가 바뀔 수 있는 시점으로 봅니다."]],
+      sig: ["ichi_cloud_up", "vwap_up", "vwap_dn"] },
+    { t: "추세 4단계와 추세 템플릿", s: "지금 이 주식은 어느 계절인가",
+      fig: wrap(fST, "① 바닥 다지기(1단계): 200일선이 평평해지고 주가가 그 주변을 오갑니다. ② 상승(2단계): 50 > 150 > 200일선 정배열, 모든 선이 위를 향합니다. ③ 천장(3단계): 주가가 200일선 주변에서 출렁입니다. ④ 하락(4단계): 역배열로 바뀌며 내려갑니다.", [[S2, "50일선"], [S1, "150일선"], [S4, "200일선"]]),
+      body: `<p>주식은 계절처럼 네 단계를 돕니다. 바닥을 다지는 1단계, 오르는 2단계, 천장을 만드는 3단계, 내리는 4단계입니다. 큰 수익은 거의 2단계에서 나옵니다. 그래서 많은 추세 매매자가 "2단계에 있는 종목만 산다"는 원칙을 씁니다.</p>
+        <p>추세 템플릿은 2단계인지를 확인하는 8가지 체크리스트입니다. 7개는 그 종목 자체의 가격과 이동평균선만 보는 <b>절대 기준</b>이고, 마지막 1개만 다른 종목과 비교하는 <b>상대 기준</b>입니다.</p>
+        <ul class="eul"><li>주가가 150일선과 200일선 위에 있다</li><li>150일선이 200일선 위에 있다 (장기 정배열)</li><li>200일선이 최소 1개월째 오르고 있다</li><li>50일선이 150일선·200일선 위에 있다</li><li>주가가 50일선 위에 있다</li><li>주가가 52주 최저가보다 30% 이상 높다</li><li>주가가 52주 최고가에서 25% 이내에 있다 (신고가권)</li><li>지난 1년 수익률이 전체 종목 중 상위 30% (상대강도, RS)</li></ul>
+        <p>이 사이트의 중장기 추천은 이 중 7개 이상을 만족하는 종목에서만 고릅니다. 반대로 3개 이하인 종목은 4단계일 가능성이 높아 하락 주의 판단에 참고합니다.</p>`,
+      terms: [["상대강도(RS)", "다른 종목과 비교한 수익률 순위. 지수가 빠질 때 덜 빠지고, 오를 때 더 오르는 종목이 RS가 높습니다."], ["2단계 상승", "장기 이동평균선이 정배열로 함께 오르는 구간."]],
+      sig: ["hi52", "near_high", "ath", "lo52", "ma240_up", "ma240_dn"] },
+    { t: "수급 읽기", s: "누가 사고 누가 파는가 — 투자 주체별 특성",
+      fig: wrap(fFX, "아래 창은 외국인 누적 순매수입니다. ① 주가가 바닥에서 옆으로 기는 동안 외국인은 조용히 사 모으고, ② 그 뒤 주가가 오르기 시작합니다.", [[S1, "외국인 누적 순매수"]]),
+      body: `<p>주식시장에는 성격이 전혀 다른 참여자들이 있습니다. 같은 "기관 순매수"라도 연기금이 사는 것과 증권사 자기매매가 사는 것은 의미가 다릅니다. 매매 기간, 사는 이유, 정보력이 다르기 때문입니다. 순매수 금액뿐 아니라 <b>얼마나 꾸준히</b> 사는지(20일 중 며칠 샀는지)를 함께 봐야 합니다.</p>
+        <p>주가보다 수급이 먼저 움직이는 경우가 많습니다. 주가는 옆으로 기는데 외국인·연기금의 누적 순매수선이 꾸준히 오른다면 물량을 모으는 중일 수 있습니다. 반대로 주가는 오르는데 큰손은 계속 팔고 개인만 사고 있다면 상승이 오래가기 어렵습니다.</p>`,
+      terms: [["순매수", "매수 금액 − 매도 금액."], ["누적 순매수", "일정 기간 순매수를 더해 이은 선. 방향이 중요합니다."], ["매수 지속성", "오늘 산 주체가 이후 20일 중 며칠을 더 샀는지. 높을수록 꾸준히 사 모으는 주체입니다."]],
+      sig: [], inv: true },
+    { t: "공매도와 대차잔고", s: "하락에 베팅한 물량 읽기",
+      fig: wrap(fSS, "아래 창은 대차잔고입니다. ① 잔고가 쌓이는 동안 주가가 내려가고, ② 잔고가 줄어들기(숏커버링) 시작하면서 주가가 반등합니다.", [[S4, "대차잔고"]]),
+      body: `<p>공매도는 주식을 빌려서 먼저 팔고, 나중에 사서 갚는 거래입니다. 주가가 내려야 이익이라 공매도가 늘면 하락에 베팅한 사람이 많다는 뜻입니다. 대차잔고는 빌려 간 주식 중 아직 갚지 않은 물량으로, 앞으로 공매도에 쓰일 수 있는 대기 물량입니다.</p>
+        <p>대차잔고가 빠르게 늘면 하락 압력이 커지는 신호로 봅니다. 그런데 잔고가 너무 많이 쌓인 상태에서 주가가 오르기 시작하면, 빌린 사람들이 손실을 줄이려고 주식을 사서 갚아야 합니다(숏커버링). 이 매수가 상승을 더 키우기도 합니다. 그래서 잔고 비율 자체보다 잔고가 늘어나는 중인지 줄어드는 중인지가 더 중요합니다. 국내는 2023년 11월~2025년 3월 공매도가 전면 금지돼, 그 기간 자료는 해석에서 뺍니다.</p>`,
+      terms: [["공매도 거래 비중", "하루 거래량 중 공매도 비율."], ["잔고 비율", "공매도 잔고 ÷ 상장주식수."], ["숏커버링", "공매도한 주식을 되사서 갚는 것. 단기 급등의 원인이 되기도 합니다."]], sig: [] },
     { t: "매매 원칙", s: "차트보다 중요한 것",
-      fig: wrap(f9, "사기 전에 손절가와 목표가를 먼저 정합니다. 위 예시는 잃을 수 있는 폭(파랑)보다 기대 수익 폭(빨강)이 3배 이상 큰 자리입니다."),
+      fig: wrap(fTG, "사기 전에 손절가와 목표가를 먼저 정합니다. 1차 목표에서 일부를 팔아 수익을 확정하고, 나머지는 2차 목표까지 들고 갑니다. 잃을 수 있는 폭(파랑)보다 기대 수익 폭(빨강)이 큰 자리만 고릅니다."),
       body: `<p>어떤 지표도 맞을 확률이 100%는 아닙니다. 그래서 수익을 내는 사람과 잃는 사람의 차이는 신호보다 원칙에서 많이 납니다.</p>
         <ul class="eul"><li><b>손절가를 먼저 정합니다.</b> 지지선이나 기준봉 시가처럼, 이 가격을 깨면 내 판단이 틀렸다고 인정할 가격을 사기 전에 정합니다.</li>
         <li><b>손익비를 따집니다.</b> 예상 수익이 예상 손실의 2배 이상인 자리만 고르면, 맞히는 비율이 절반이 안 되어도 결과가 플러스가 될 수 있습니다.</li>
-        <li><b>나눠서 사고 나눠서 팝니다.</b> 한 번에 다 사면 판단이 틀렸을 때 대응할 여지가 없습니다.</li>
+        <li><b>나눠서 사고 나눠서 팝니다.</b> 한 번에 다 사면 판단이 틀렸을 때 대응할 여지가 없습니다. 1차 목표에서 절반을 팔고 손절가를 매수가로 올리면, 남은 물량은 잃지 않는 거래가 됩니다.</li>
+        <li><b>한 종목에 몰지 않습니다.</b> 한 번의 손절이 전체 자금의 1~2%를 넘지 않게 종목당 금액을 정합니다. 손절폭이 10%라면 종목당 전체 자금의 10~20%가 상한입니다.</li>
+        <li><b>떨어지는 칼날은 잡지 않습니다.</b> 많이 빠졌다는 이유만으로 사지 않습니다. 이동평균선이 아래를 향하는 종목은 싸 보여도 더 싸질 수 있습니다.</li>
         <li><b>근거가 겹치는 자리를 찾습니다.</b> 지지선·이동평균선·거래량처럼 서로 다른 근거가 같은 가격을 가리킬 때 신뢰도가 올라갑니다.</li>
         <li><b>시장과 섹터를 먼저 봅니다.</b> 지수가 빠지는 날에는 좋은 차트도 함께 빠집니다. 섹터·테마 화면에서 돈이 몰리는 업종을 확인하세요.</li>
         <li><b>거래대금이 적은 종목은 조심합니다.</b> 차트가 쉽게 만들어지고, 팔고 싶을 때 못 팔 수 있습니다.</li></ul>`,
@@ -2231,6 +2512,20 @@ const EF = (() => {
   ];
 })();
 
+const INV_P = [["외국인", "글로벌 운용사·연기금·투자은행", "대형주 중심으로 수주~수개월 추세를 따라감. 환율과 글로벌 자금 흐름의 영향이 큼"],
+  ["연기금", "국민연금 등 공적 연금", "장기 보유. 하락 때 나눠 사고 비중을 맞추는 매매가 많아 중장기 하방을 받쳐 줌"],
+  ["투신", "자산운용사 공모펀드", "펀드 자금 유출입에 따라 매매하는 중기 관점. 분기 말 수익률 관리 매매가 나타나기도 함"],
+  ["사모", "소수 고액 자금 펀드", "단기·이벤트 중심. 매수가 며칠 이어지지 않는 경우가 많음"],
+  ["금융투자", "증권사 자기매매·ETF 유동성 공급", "차익거래·ETF 설정 등 기계적 초단기 매매 비중이 커 방향성 신호로는 약함"],
+  ["보험", "보험사 자산운용", "배당·안정성 중시 장기 보유. 매매 빈도 낮음"],
+  ["기타법인", "일반 법인", "자사주·계열사 지분 매매 등 경영 목적 거래가 섞임"],
+  ["개인", "개인 투자자", "하락 때 사고 상승 때 파는 역추세 성향. 개인만 많이 사는 종목은 약세인 경우가 많음"]];
+function invTable() {
+  const I = S.inv?.ok ? S.inv.g || {} : {}, has = Object.keys(I).length > 0;
+  return `<div class="scroll mt"><table class="tbl evt"><thead><tr><th class="l">투자 주체</th><th class="l">매매 성향</th>${has ? `<th>많이 산 뒤 1개월<br><small>시장 대비</small></th><th>3개월</th><th>매수 지속</th>` : ""}</tr></thead><tbody>
+    ${INV_P.map(([g, who, sty]) => { const x = I[g]; return `<tr><td class="l"><b>${g}</b><div class="lbl">${who}</div></td><td class="l" style="white-space:normal;min-width:220px">${sty}</td>${has ? (x ? `<td class="num ${cls(x.after["20"][0])}">${pct(x.after["20"][0])}p</td><td class="num ${cls(x.after["60"][0])}">${pct(x.after["60"][0])}p</td><td class="num">${p1(x.persist)}%</td>` : `<td>-</td><td>-</td><td>-</td>`) : ""}</tr>`; }).join("")}</tbody></table></div>
+    ${has ? `<p class="note">"많이 산 뒤"는 20거래일 순매수 금액이 거래대금 대비 같은 날 상위 10%였던 종목의 이후 성과(같은 날 전체 평균 대비)입니다. 매수 지속은 그 주체가 순매수한 날 이후 20일 중 다시 순매수한 날의 비율입니다. 시가총액 1조 원 이상 ${S.inv.stocks}종목, ${S.inv.from} ~ ${S.inv.to} 기준.</p>` : `<p class="note">주체별 과거 성과 통계는 실제 투자자별 매매 자료로 갱신될 때 함께 표시됩니다.</p>`}`;
+}
 VIEWS.edu = function () {
   const h = decodeURIComponent(location.hash.slice(1)).split("-")[1];
   const i = Math.max(0, Math.min(EF.length - 1, +(h ?? store.get("edu", 0)) || 0));
@@ -2245,18 +2540,19 @@ VIEWS.edu = function () {
         <td class="num">${t ? `<button class="chip" data-sg="${r[0]}">${t}종목</button>` : `<span class="flat">-</span>`}</td></tr>`; }).join("")}</tbody></table></div>
     <p class="note" style="padding:10px 16px 14px">시장 대비는 같은 날 전체 종목 평균보다 1개월 수익률이 얼마나 높았는지(%p)입니다. ±0.5%p 안쪽이면 신호만으로는 시장 평균과 큰 차이가 없다고 보면 됩니다. 오늘 버튼을 누르면 최근 3일 안에 이 신호가 나온 종목을 조건검색에서 보여줍니다.</p></div></section>` : "";
   const flat = R.filter(r => r[6] && Math.abs(r[6][1]) < 0.5).length;
-  const v = page(`<div class="ph"><div><h1>차트 공부</h1><p>기술적 분석의 기본 개념을 그림과 함께 정리했습니다. 개념마다 지난 10년 실제 성과를 붙였습니다.</p></div></div>
+  const v = page(`<div class="ph"><div><h1>차트 공부</h1><p>캔들부터 추세·보조지표·수급까지 ${EF.length}개 주제를 예시 차트와 함께 정리했습니다. 개념마다 지난 10년 실제 성과를 붙였습니다.</p></div></div>
     <div class="edu"><nav class="etoc" aria-label="차트 공부 목차">${EF.map((e, k) => `<a href="#edu-${k}" ${k === i ? `aria-current="page"` : ""}><span class="num">${k + 1}</span>${e.t}</a>`).join("")}</nav>
     <article class="eart"><header><span class="lbl">${i + 1} / ${EF.length}</span><h2>${c.t}</h2><p>${c.s}</p></header>
       ${c.fig}${c.body}
+      ${c.inv ? invTable() : ""}
       ${c.terms.length ? `<dl class="eterm">${c.terms.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join("")}</dl>` : ""}
       ${c.last && R.length ? `<p class="ebox">이 사이트가 분석한 기술적 신호 ${R.length}개 중 ${flat}개는 1개월 성과가 시장 평균과 ±0.5%p 이내로 차이가 거의 없었습니다. 한 가지 신호보다 여러 근거와 원칙이 중요한 이유입니다. 신호별 전체 통계는 <a href="#pat">기술적 신호</a>, 규칙대로 사고팔았을 때의 성과는 <a href="#bt">전략 검증</a>에서 볼 수 있습니다.</p>` : ""}
       ${stat}
       <div class="enav">${i > 0 ? `<a class="btn" href="#edu-${i - 1}">이전 · ${EF[i - 1].t}</a>` : "<span></span>"}${i < EF.length - 1 ? `<a class="btn pri" href="#edu-${i + 1}">다음 · ${EF[i + 1].t}</a>` : ""}</div>
     </article></div>`);
   $$("[data-sg]", v).forEach(b => b.onclick = () => {
-    st.scr ||= store.get("scr", { mk: "ALL", sec: "", r: {}, t: [] });
-    Object.assign(st.scr, { mk: "ALL", sec: "", r: {}, t: [], sg: b.dataset.sg }); store.set("scr", st.scr); location.hash = "screen"; });
+    st.scr ||= store.get("scr", { mk: "ALL", sec: "", t: [] });
+    Object.assign(st.scr, { mk: "ALL", sec: "", t: [], sg: b.dataset.sg }); store.set("scr", st.scr); location.hash = "screen"; });
   const cur = $(".etoc [aria-current]", v); if (cur && innerWidth < 900) cur.scrollIntoView({ inline: "center", block: "nearest" });
 };
 const aggTF = (R, tf) => { const out = []; let key = null;          // 주봉·월봉 데이터가 없을 때 일봉으로 합성
@@ -2587,7 +2883,7 @@ async function vStock(code) {
   const TAK0 = [["fc", "1개월 예상", OC.fc], ["sup", "지지", OC.sup], ["res", "저항", OC.res], ["tl", "빗각", OC.tl], ["vp", "매물대", "#94A3B8"], ["base", "기준봉", OC.base], ["fib", "피보나치", OC.fib], ["gap", "미체결 갭", OC.gap], ["sig", "신호", "#64748B"], ["sw", "고점·저점", "#64748B"]]
     .filter(([k]) => (k === "fc" ? FC : TA) && (k !== "sup" || TA.support?.length) && (k !== "res" || TA.resist?.length) && (k !== "fib" && k !== "sw" || TA.fib) && (k !== "vp" || TA.vp?.bins) && (k !== "tl" || TA.tl?.length) && (k !== "base" || TA.base)
       && (k !== "gap" || TA.ov?.gaps?.length) && (k !== "sig" || d.sigs?.length));
-  const DAILY_ONLY = new Set(["fc", "sig", "tl", "sw", "bt", "vwap"]);
+  const DAILY_ONLY = new Set(["fc", "sig", "tl", "sw", "bt", "vwap", "gap"]);
   const unit = () => ({ d: "일", w: "주", m: "개월" })[st.tf || "d"];
   const relab = l => l.replace(/^(\d+)일선$/, (_, k) => `${k}${unit()}선`);
   const tog = ([k, l, c]) => `<label class="tog" style="--c:${c}"><input type="checkbox" data-k="${k}" ${on.has(k) ? "checked" : ""}><span class="sw"></span>${relab(l)}</label>`;
@@ -2655,14 +2951,21 @@ async function vStock(code) {
       if (onA2.has("tl")) (TA.tl || []).forEach(L => {
         const col = OC.tl, o = { priceLineVisible: false, crosshairMarkerVisible: false };
         const sL = mc.addLineSeries({ ...o, color: col, lineWidth: 1, lastValueVisible: false });
-        lg(col, L.name, L.b[1]);
+        lg(col, `${L.name}(${L.kind === "dn" ? "낮아지는 고점을 이은 저항선" : "높아지는 저점을 이은 지지선"} · 접점 ${L.touch ?? 2}회)`, L.b[1]);
         sL.setData(seg2(L.a, L.b));
         if (L.ch) mc.addLineSeries({ ...o, color: col, lineWidth: 1, lineStyle: 2, lastValueVisible: false }).setData(seg2(L.ch[0], L.ch[1]));
         if (L.brk && have.has(L.brk)) { mk.push({ time: L.brk, position: L.kind === "dn" ? "belowBar" : "aboveBar", color: col, shape: "circle", text: "" }); lg(col, `${L.kind === "dn" ? "빗각 돌파" : "빗각 이탈"}(점) ${dt(L.brk.slice(5))}`); }
       });
-      if (onA2.has("gap") && TA.ov?.gaps) TA.ov.gaps.forEach(([k2, a2, b2]) => { const cg = OC.gap;
-        cs.createPriceLine({ price: a2, color: cg, lineWidth: 1, lineStyle: 3, axisLabelVisible: false, title: "" }); lg(cg, `${k2} ${n(a2)}~${n(b2)}`);
-        cs.createPriceLine({ price: b2, color: cg, lineWidth: 1, lineStyle: 3, axisLabelVisible: false, title: "" }); });
+      if (onA2.has("gap") && TA.ov?.gaps?.length) {
+        const G = TA.ov.gaps, lastT = O.at(-1)[0], lay2 = document.createElement("div"); lay2.className = "gapl"; $("#pc").appendChild(lay2);
+        const renderG = () => { if (!lay2.isConnected) return; const tsc = mc.timeScale();
+          lay2.innerHTML = G.map(([k2, lo, hi, t0, t1]) => { const x1 = tsc.timeToCoordinate(t0) ?? (t0 < (O[0]?.[0] || "") ? 0 : null), x2 = tsc.timeToCoordinate(t1 || lastT), y1 = cs.priceToCoordinate(hi), y2 = cs.priceToCoordinate(lo);
+            if ([x1, x2, y1, y2].some(q => q == null)) return "";
+            return `<i class="${k2 === "상승 갭" ? "gu" : "gd"}${t1 ? " f" : ""}" style="left:${x1}px;width:${Math.max(x2 - x1 + (t1 ? 0 : 6), 2)}px;top:${Math.min(y1, y2) - Math.max(0, 4 - Math.abs(y2 - y1)) / 2}px;height:${Math.max(Math.abs(y2 - y1), 4)}px"></i>`; }).join(""); };
+        requestAnimationFrame(renderG); setTimeout(renderG, 150); mc.timeScale().subscribeVisibleLogicalRangeChange(() => requestAnimationFrame(renderG));
+        const nu = G.filter(g => !g[4]).length;
+        lg(OC.gap, `갭(박스) 미체결 ${nu}개${G.length - nu ? ` · 최근 메워진 갭 ${G.length - nu}개(점선 박스)` : ""} · 빨강 상승 갭, 파랑 하락 갭`);
+      }
       if (onA2.has("sig") && d.sigs) {
         const EXTRA = new Set(["period_brk", "fib_bounce", "hi52", "lo52", "box_up", "box_dn", "limit_up", "limit_dn", "ichi_cloud_up", "ichi_cloud_dn"]);
         const from = O.at(-80)?.[0] || "", seen = new Set(), SL = [];          // 최근 80봉 · 가격 구조 신호만 · 하루 한 개

@@ -39,6 +39,7 @@ import model
 import patterns
 import rating
 import shorts
+import investors
 import themes
 import track
 import strategy
@@ -621,11 +622,16 @@ def build_rec(rt: dict | None, lst, src, prices: dict, demo: bool):
         dump("track.json", {"h": {}})
         return
     names = dict(zip(lst.Code, lst.Name))
+    pk = {k: v for k, v in pk.items() if k != "warn"}
+    wn = rt["picks"].get("warn")
     for h in pk.values():
         for p in h["picks"]:
             p["name"] = names.get(p["code"], p["name"])
             p["close"] = r2(p["close"])
-    dump("rec.json", {"ok": True, "asof": rt["meta"]["asof"], "h": pk})
+    for p in (wn or {}).get("list", []):
+        p["name"] = names.get(p["code"], p["name"])
+        p["close"] = r2(p["close"])
+    dump("rec.json", {"ok": True, "asof": rt["meta"]["asof"], "h": pk, "warn": wn})
     day = pd.Timestamp(src.day).strftime("%Y-%m-%d")
     path = (OUT / "_track_demo.csv") if (demo or src.sample_flow) else (ROOT / "track" / "picks.csv")
     tr = track.load(path)
@@ -698,6 +704,12 @@ def main():
                 import traceback
                 traceback.print_exc()
                 log("투자의견 실패", e)
+            log("투자 주체별 매매 특성")
+            try:
+                inv = investors.study(scan_prices, scan_flows, log=log)
+                dump("investors.json", {**inv, "sample": bool(src.demo or src.sample_flow)})
+            except Exception as e:
+                log("투자 주체 분석 실패", e)
             log("공매도")
             try:
                 sample = bool(src.demo or src.sample_flow)
@@ -723,9 +735,11 @@ def main():
     detail = lst[lst.Marcap >= SITE["chart_min_marcap"]].sort_values("Marcap", ascending=False).Code.tolist()
     if args.max_detail:
         keep = (set(detail[:args.max_detail]) | set(DEMO_REAL)
-                | {p["code"] for h in ((rt or {}).get("picks") or {}).values() for p in h["picks"]})
+                | {p["code"] for k, h in ((rt or {}).get("picks") or {}).items() for p in (h.get("list", []) if k == "warn" else h["picks"])})
         detail = [c for c in detail if c in keep]
     flowset = set(lst[lst.Marcap >= SITE["flow_min_marcap"]].Code)
+    if not (OUT / "investors.json").exists():
+        dump("investors.json", {"ok": False})
     if not (OUT / "short.json").exists():
         dump("short.json", {"ok": False})
     metrics, views = build_details(src, lst, detail, flowset, scan_prices, scan_flows, pstats, ai_today, rt, ext_prices, short_ctx)

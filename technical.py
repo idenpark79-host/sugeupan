@@ -326,60 +326,108 @@ def _ds(d, i):
     return str(pd.Timestamp(d.index[i]).date())
 
 
+def _trendline(h, l, c, side, look=200, k=5, tol=0.004):
+    """추세선(빗각) — 하락: 고점 2개 이상을 잇고 그 사이 어떤 고가도 선을 넘지 않는 선, 상승: 저점 대칭.
+    후보 가운데 '선에 닿은 고점(저점) 수'가 많고 기간이 긴 선을 고른다. 이후 종가가 선을 1% 넘게 벗어나면 돌파(이탈)."""
+    n = len(c)
+    s0 = max(0, n - look)
+    src = h if side < 0 else l
+    piv = [i for i in range(s0 + k, n - 2) if (src[i] == src[max(s0, i - k):min(n, i + k + 1)].max() if side < 0
+                                               else src[i] == src[max(s0, i - k):min(n, i + k + 1)].min())]
+    if len(piv) < 2:
+        return None
+    best = None
+    for ai in range(len(piv)):
+        i = piv[ai]
+        for j in piv[ai + 1:]:
+            if j - i < 8:
+                continue
+            p1, p2 = src[i], src[j]
+            if (side < 0 and p2 >= p1) or (side > 0 and p2 <= p1):
+                continue
+            sl = (p2 - p1) / (j - i)
+            xs = np.arange(i, n)
+            ln = p1 + sl * (xs - i)
+            if np.any(ln <= 0):
+                continue
+            # 두 점 사이에서는 고가(저가)가 선을 넘으면 안 됨
+            seg = src[i:j + 1]
+            lj = ln[: j - i + 1]
+            if (side < 0 and np.any(seg > lj * (1 + tol))) or (side > 0 and np.any(seg < lj * (1 - tol))):
+                continue
+            # 이후 돌파: 종가 기준 1% 이상
+            after = c[j + 1:]
+            la = ln[j - i + 1:]
+            br = np.flatnonzero(after > la * 1.01) if side < 0 else np.flatnonzero(after < la * 0.99)
+            brk = int(j + 1 + br[0]) if len(br) else None
+            end = brk if brk is not None else n - 1
+            seg2 = src[j:end]
+            l2 = ln[j - i:end - i]
+            if len(seg2) and ((side < 0 and np.any(seg2 > l2 * 1.02)) or (side > 0 and np.any(seg2 < l2 * 0.98))):
+                continue
+            touch = sum(1 for q in piv if i <= q <= end and abs(src[q] / (p1 + sl * (q - i)) - 1) <= 0.015)
+            score = touch * 100 + (end - i)
+            if best is None or score > best["score"]:
+                best = {"i1": i, "p1": float(p1), "i2": j, "p2": float(p2), "s": float(sl), "brk": brk, "touch": touch, "score": score}
+    return best
+
+
 def diagonal(d: pd.DataFrame) -> dict:
-    """마지막 날 기준 하락·상승 빗각과 평행 채널, 현재 위치·최근 신호."""
-    import patterns as P
-    fl, dn, up = P.diag(d)
+    """빗각(추세선): 하락 빗각 = 낮아지는 고점들을 이은 선(저항), 상승 빗각 = 높아지는 저점들을 이은 선(지지)."""
     n = len(d)
-    c = float(d.Close.iloc[-1])
+    c_ = d.Close.values.astype(float)
+    c = float(c_[-1])
     h, l = d.High.values.astype(float), d.Low.values.astype(float)
     lines, text, lv = [], [], []
-    for side, L in ((-1, dn), (1, up)):
+    for side in (-1, 1):
+        L = _trendline(h, l, c_, side)
         if not L:
             continue
         val = lambda i: L["p1"] + L["s"] * (i - L["i1"])
-        now = val(n - 1)
         brk = L["brk"]
-        recent_brk = brk is not None and n - 1 - brk <= 20
-        if now <= 0 or (brk is not None and not recent_brk):
+        if brk is not None and n - 1 - brk > 40:            # 오래전에 깨진 선은 표시하지 않음
             continue
-        if side < 0 and now > c * 1.25 and not recent_brk:
-            continue
-        if side > 0 and now < c * 0.75 and not recent_brk:
-            continue
-        xs = np.arange(L["i1"], n)
-        base = L["p1"] + L["s"] * (xs - L["i1"])
-        off = float((l[L["i1"]:] - base).min()) if side < 0 else float((h[L["i1"]:] - base).max())
+        now = val(n - 1)
+        if brk is None and ((side > 0 and now < c * 0.75) or (side < 0 and now > c * 1.3) or now <= 0):
+            continue                                        # 지금 가격과 너무 먼 선은 의미가 약함
+        endi = n - 1 if brk is None else min(n - 1, brk + 10)
         nm = "하락 빗각" if side < 0 else "상승 빗각"
-        anc = f"{_date(d, L['i1'])}·{_date(d, L['i2'])} {'고점' if side < 0 else '저점'} 연결"
+        anc = f"{_date(d, L['i1'])}·{_date(d, L['i2'])} {'고점' if side < 0 else '저점'} 연결, 접점 {L['touch']}회"
+        xs = np.arange(L["i1"], endi + 1)
+        base = L["p1"] + L["s"] * (xs - L["i1"])
+        src_o = l if side < 0 else h
+        off = float((src_o[L["i1"]:endi + 1] - base).min()) if side < 0 else float((src_o[L["i1"]:endi + 1] - base).max())
         lines.append({"kind": "dn" if side < 0 else "up", "name": nm, "a": [_ds(d, L["i1"]), round(L["p1"], 2)],
-                      "b": [_ds(d, n - 1), round(now, 2)],
-                      "ch": [[_ds(d, L["i1"]), round(L["p1"] + off, 2)], [_ds(d, n - 1), round(now + off, 2)]] if abs((now + off) / c - 1) <= 0.3 else None,
+                      "b": [_ds(d, endi), round(val(endi), 2)], "touch": L["touch"],
+                      "ch": [[_ds(d, L["i1"]), round(L["p1"] + off, 2)], [_ds(d, endi), round(val(endi) + off, 2)]]
+                      if abs((val(endi) + off) / c - 1) <= 0.3 else None,
                       "brk": _ds(d, brk) if brk is not None else None})
         gap = c / now - 1
         if side < 0:
             if brk is not None:
-                st = f"{_date(d, brk)} 돌파" + (" 후 빗각 위 안착" if gap >= 0 else " 후 재이탈 · 돌파 실패 유의")
+                st = f"{_date(d, brk)} 종가 돌파" + (" 후 선 위 안착 · 저항이 지지로 바뀌는지 확인" if gap >= 0 else " 후 재이탈 · 돌파 실패 유의")
                 if gap >= 0:
                     lv.append((now, "돌파한 하락 빗각", -1))
             elif gap >= -0.03:
-                st = f"주가 {pc(gap, 1)} 근접 · 돌파 여부 주목"
+                st = f"주가 {pc(gap, 1)} · 저항선 근접, 돌파 여부 주목"
                 lv.append((now, "하락 빗각", 1))
             else:
-                st = f"주가 {pc(gap, 0)} 하회 · 하락 추세 유지"
+                st = f"주가 {pc(gap, 0)} 아래 · 하락 추세 유지"
                 lv.append((now, "하락 빗각", 1))
         else:
             if brk is not None:
-                st = f"{_date(d, brk)} 이탈" + (" 후 회복" if gap >= 0 else " · 추세 훼손")
+                st = f"{_date(d, brk)} 종가 이탈" + (" 후 회복" if gap >= 0 else " · 상승 추세 훼손")
                 if gap < 0:
                     lv.append((now, "이탈한 상승 빗각", 1))
             elif gap <= 0.03:
-                st = f"주가 {pc(gap, 1)} · 지지 테스트"
+                st = f"주가 {pc(gap, 1)} · 지지선 테스트 중"
                 lv.append((now, "상승 빗각", -1))
             else:
-                st = f"주가 {pc(gap, 0)} 상회 · 상승 추세 유지"
+                st = f"주가 {pc(gap, 0)} 위 · 상승 추세 유지"
                 lv.append((now, "상승 빗각", -1))
         text.append(f"{nm} {wr(now)}원({anc}) · {st}")
+    import patterns as P
+    fl, _, _ = P.diag(d)
     last = None
     for k in ("tl_dn_brk", "tl_up_brk", "tl_up_sup", "tl_dn_rej"):
         hits = np.flatnonzero(fl[k][-5:])
@@ -454,19 +502,33 @@ def extras(d: pd.DataFrame) -> dict:
     if np.isfinite(ma20):
         el, eh = ma20 * 0.8, ma20 * 1.2
         rows.append(["엔벨로프", f"20일선 ±20% · 하단 {wr(el)}원 · 상단 {wr(eh)}원 · 현재 20일선 {pc(c / ma20 - 1, 1)}"])
-    # 미체결 갭 (최근 60일)
-    gaps = []
-    for t in range(max(1, n - 60), n):
-        if l[t] > h[t - 1] and l[t:].min() > h[t - 1]:
-            gaps.append(("상승 갭", h[t - 1], min(l[t], l[t:].min()), t))
-        if h[t] < l[t - 1] and h[t:].max() < l[t - 1]:
-            gaps.append(("하락 갭", max(h[t], h[t:].max()), l[t - 1], t))
+    # 갭 (최근 250일): 미체결 = 이후 가격이 갭 구간을 다 채우지 않음. 박스는 남은 구간만.
+    gaps, filled = [], []
+    for t in range(max(1, n - 250), n):
+        if l[t] > h[t - 1] * 1.002:
+            lo_, hi_ = h[t - 1], l[t]
+            rest = l[t:].min()
+            if rest > lo_:
+                gaps.append(("상승 갭", lo_, min(hi_, rest), t, None))
+            elif n - t <= 120:
+                f_ = t + int(np.flatnonzero(l[t:] <= lo_)[0])
+                filled.append(("상승 갭", lo_, hi_, t, f_))
+        if h[t] < l[t - 1] * 0.998:
+            lo_, hi_ = h[t], l[t - 1]
+            rest = h[t:].max()
+            if rest < hi_:
+                gaps.append(("하락 갭", max(lo_, rest), hi_, t, None))
+            elif n - t <= 120:
+                f_ = t + int(np.flatnonzero(h[t:] >= hi_)[0])
+                filled.append(("하락 갭", lo_, hi_, t, f_))
     if gaps:
-        gaps = sorted(gaps, key=lambda g: abs((g[1] + g[2]) / 2 / c - 1))[:2]
-        rows.append(["미체결 갭", " / ".join(f"{k} {wr(a)}~{wr(b)}원({_date(d, t)})" for k, a, b, t in gaps)])
-        for k, a, b, t in gaps:
+        near = sorted(gaps, key=lambda g: abs((g[1] + g[2]) / 2 / c - 1))[:3]
+        rows.append(["미체결 갭", f"{len(gaps)}개 · 가까운 순 " + " / ".join(f"{k} {wr(a)}~{wr(b)}원({_date(d, t)})" for k, a, b, t, _ in near)])
+        for k, a, b, t, _ in near[:2]:
             lv.append((a if k == "상승 갭" else b, f"{k} {'하단' if k == '상승 갭' else '상단'}"))
-        ov["gaps"] = [[k, round(float(a), 2), round(float(b), 2), _ds(d, t)] for k, a, b, t in gaps]
+    if gaps or filled:
+        ov["gaps"] = [[k, round(float(a), 2), round(float(b), 2), _ds(d, t), _ds(d, f) if f is not None else None]
+                      for k, a, b, t, f in sorted(gaps, key=lambda g: -g[3])[:12] + filled[-8:]]
     # 상·하한가, 거래량 이력, 연속 등락
     chg = cl[1:] / cl[:-1] - 1
     lu = [i + 1 for i in range(max(0, n - 61), n - 1) if chg[i] >= 0.295]
