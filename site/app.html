@@ -598,6 +598,12 @@ footer a{text-decoration:underline;text-underline-offset:2px}
 tr.cur td{background:var(--accent-soft);font-weight:600}
 #stabs{padding:10px 16px 0}
 #tbody .card-b.view,#tbody .card-b.opv{padding-top:14px}
+.ovl{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:2px 0 10px}
+.ovl::-webkit-scrollbar{display:none}
+.chip.oc{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;font-size:12.5px;border-radius:14px;background:var(--surface)}
+.chip.oc i{width:10px;height:3px;border-radius:1px}
+.chip.oc[aria-pressed="false"]{color:var(--muted)} .chip.oc[aria-pressed="false"] i{opacity:.35}
+.chip.oc[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--ink);font-weight:600}
 
 </style>
 
@@ -1441,7 +1447,7 @@ VIEWS.ai = function () {
   if (!S.rec?.ok) { page(`<div class="ph"><div><h1>추천종목</h1></div></div><div class="card empty">추천종목 산출 결과가 아직 없습니다.</div>`); return; }
   const hs = [20, 5].filter(h => recH(h));
   if (!hs.includes(+st.aiH)) st.aiH = hs[0];
-  const v = page(`<div class="ph"><div><h1>추천종목</h1><p>${dt(S.meta.asof)} 종가 기준 · 익일 시가 매수 가정 · 퀀트 스코어와 기술적 분석으로 선정</p></div></div>
+  const v = page(`<div class="ph"><div><h1>추천종목</h1><p>${dt(S.meta.asof)} 종가 기준 · 익일 시가 매수 가정 · 퀀트 스코어와 기술적 분석으로 선정</p><p class="lbl" style="margin-top:4px">추천 순위는 목표가·손절가로 사고팔 때의 기대 수익 순서이고, 투자의견은 다음 1개월 시장 대비 순위입니다. 기준이 달라 순위와 의견이 다를 수 있으며, 둘 다 좋은 종목이 더 확실한 후보입니다.</p></div></div>
     ${seg("aih", hs.map(h => [h, `${HZL(h)}<small>${HZP(h)} 보유</small>`]), st.aiH, "hz")}
     <div id="aib" style="margin-top:16px"></div>`);
   st.aiS = store.get("aiS", "base");
@@ -2271,6 +2277,7 @@ VIEWS.pf = async function () {
 };
 
 /* ── 지표 계산 ── */
+const OC = { fc: "#7C3AED", sup: "#0891B2", res: "#D946EF", tl: "#A16207", base: "#0F766E", fib: "#64748B", gap: "#94A3B8" };   // 분석선마다 다른 색
 const IND = {
   over: [["ma5", "5일선", "#9AA3B2"], ["ma10", "10일선", "#C084FC"], ["ma20", "20일선", "#E08A00"], ["ma60", "60일선", "#12A150"], ["ma120", "120일선", "#7A5AF8"], ["ma240", "240일선", "#64748B"], ["vwap", "120일 평단가", "#0F766E"],
     ["bb", "볼린저밴드", "#8C96A6"], ["env", "엔벨로프", "#B45309"], ["ichi", "일목균형표", "#0EA5A4"], ["sar", "파라볼릭 SAR", "#DB2777"], ["bt", "과거 추천 매매", "#1C2B4D"]],
@@ -2440,7 +2447,7 @@ async function vStock(code) {
     ${[pick, pick5].filter(Boolean).map(p => `<section class="pickbox mt"><div class="pb-h">${opTag(s.op)}<b>${HZL(p.H)} 추천종목 ${p.rank}위</b><span class="lbl">${HZP(p.H)} 보유 · ${dt(S.meta.asof)} 선정</span></div>
       ${pickBody(p, p.H, recH(p.H)?.model?.grades, recH(p.H)?.model?.grades?.[p.grade] ? `과거 ${p1(recH(p.H).model.grades[p.grade][1])}%` : null)}</section>`).join("")}
     <section class="card mt"><div class="card-h"><h2>핵심 요약 <small>${dt(S.meta.asof)} 종가 기준</small></h2></div><div class="card-b"><div class="ksum" id="ksum"><p class="note">불러오는 중</p></div></div></section>
-    ${card("차트", `<div class="controls">${seg("tf", [["d", "일봉"], ["w", "주봉"], ["m", "월봉"]], st.tf || "d")}<span id="spw"></span><button class="btn sm" id="indbtn" type="button" aria-expanded="false">지표 설정</button></div>`, `<div class="ind" id="ind" hidden></div><div class="clg" id="clg"></div><div id="panes"></div>`, "mt")}
+    ${card("차트", `<div class="controls">${seg("tf", [["d", "일봉"], ["w", "주봉"], ["m", "월봉"]], st.tf || "d")}<span id="spw"></span><button class="btn sm" id="indbtn" type="button" aria-expanded="false">보조지표</button></div>`, `<div class="ovl" id="ovl"></div><div class="ind" id="ind" hidden></div><div class="clg" id="clg"></div><div id="panes"></div>`, "mt")}
     <section class="card mt"><div class="rets num" id="rets" style="border-top:0"></div><div class="kv num" style="border-top:1px solid var(--line)">${kv.map(([k, x]) => `<div><div class="k">${k}</div><div class="v">${x}</div></div>`).join("")}</div><div class="range" id="rng"></div></section>
     <section class="card mt"><div class="card-h"><h2>상세 분석</h2></div><div class="tabs2" id="stabs"></div><div id="tbody"></div></section>
     ${cardF(`동일 섹터 <small>${esc(thOf(s))}</small>`, thBy(thOf(s)) ? `<a class="more" href="#sector-${encodeURIComponent(thOf(s))}">섹터 동향</a>` : `<a class="more" href="#map" id="psec">업종 맵</a>`, `<div class="list" id="peers"></div>`, "mt")}`);
@@ -2480,11 +2487,11 @@ async function vStock(code) {
   const BT = S.bt?.byStock?.["20"]?.[code];
   if (BT && store.get("btm", true)) on.add("bt");
   sigMeta();
-  const TA = d.view?.ta, onA = new Set(store.get("ta2", ["tl", "sr", "vp"]));
+  const TA = d.view?.ta, onA = new Set(store.get("ta2", ["fc", "sup", "res", "vp"]));
+  if (!store.get("ta3")) { if (onA.delete("sr")) { onA.add("sup"); onA.add("res"); } onA.delete("tl"); onA.add("fc"); store.set("ta3", 1); store.set("ta2", [...onA]); }
   const FC = d.op?.fc;
-  if (FC && !store.get("fc1")) { onA.add("fc"); store.set("fc1", 1); store.set("ta2", [...onA]); }
-  const TAK0 = [["fc", "1개월 예상 범위", "var(--accent)"], ["sig", "신호 표시", "var(--ink-2)"], ["tl", "빗각", "var(--s1)"], ["base", "기준봉", "var(--s3)"], ["gap", "미체결 갭", "var(--s4)"], ["sr", "지지·저항", "var(--s2)"], ["fib", "피보나치", "var(--s3)"], ["vp", "매물대", "var(--accent)"], ["sw", "고점·저점", "var(--ink-2)"]]
-    .filter(([k]) => (k === "fc" ? FC : TA) && (k !== "fib" && k !== "sw" || TA.fib) && (k !== "vp" || TA.vp?.bins) && (k !== "tl" || TA.tl?.length) && (k !== "base" || TA.base)
+  const TAK0 = [["fc", "1개월 예상", OC.fc], ["sup", "지지", OC.sup], ["res", "저항", OC.res], ["tl", "빗각", OC.tl], ["vp", "매물대", "#94A3B8"], ["base", "기준봉", OC.base], ["fib", "피보나치", OC.fib], ["gap", "미체결 갭", OC.gap], ["sig", "신호", "#64748B"], ["sw", "고점·저점", "#64748B"]]
+    .filter(([k]) => (k === "fc" ? FC : TA) && (k !== "sup" || TA.support?.length) && (k !== "res" || TA.resist?.length) && (k !== "fib" && k !== "sw" || TA.fib) && (k !== "vp" || TA.vp?.bins) && (k !== "tl" || TA.tl?.length) && (k !== "base" || TA.base)
       && (k !== "gap" || TA.ov?.gaps?.length) && (k !== "sig" || d.sigs?.length));
   const DAILY_ONLY = new Set(["fc", "sig", "tl", "sw", "bt", "vwap"]);
   const unit = () => ({ d: "일", w: "주", m: "개월" })[st.tf || "d"];
@@ -2495,7 +2502,12 @@ async function vStock(code) {
   const DEFP = { d: 120, w: 52, m: 60 };
   const renderInd = () => {
     const dly = (st.tf || "d") === "d", TAK = TAK0.filter(([k]) => dly || !DAILY_ONLY.has(k));
-    $("#ind").innerHTML = `<div class="grp"><b>가격</b>${IND.over.filter(x => (x[0] !== "bt" || BT) && (dly || !DAILY_ONLY.has(x[0]))).map(tog).join("")}</div><div class="grp"><b>보조</b>${IND.sub.map(tog).join("")}</div>${TAK.length ? `<div class="grp"><b>분석</b>${TAK.map(togA).join("")}</div>` : ""}`;
+    const MAIN = ["ma5", "ma20", "ma60", "ma120", "bb"], ovr = IND.over.filter(x => (x[0] !== "bt" || BT) && (dly || !DAILY_ONLY.has(x[0])));
+    const chip = (k, l, c, a) => { const pr = a ? onA.has(k) : on.has(k); return `<button type="button" class="chip oc" aria-pressed="${pr}" data-${a ? "a" : "k"}="${k}"><i style="background:${c}"></i>${relab(l)}</button>`; };
+    $("#ovl").innerHTML = TAK.map(([k, l, c]) => chip(k, l, c, 1)).join("") + ovr.filter(x => MAIN.includes(x[0])).map(([k, l, c]) => chip(k, l, c)).join("");
+    $$("#ovl .chip").forEach(b => b.onclick = () => { const a = b.dataset.a, k = b.dataset.k, S2 = a ? onA : on, key = a || k;
+      S2.has(key) ? S2.delete(key) : S2.add(key); if (a) store.set("ta2", [...onA]); else store.set("ind", [...on].filter(x => x !== "bt")); draw(); });
+    $("#ind").innerHTML = `<div class="grp"><b>가격</b>${ovr.filter(x => !MAIN.includes(x[0])).map(tog).join("")}</div><div class="grp"><b>보조</b>${IND.sub.map(tog).join("")}</div>`;
     $$("#ind input").forEach(i => i.onchange = () => {
       if (i.dataset.a) { i.checked ? onA.add(i.dataset.a) : onA.delete(i.dataset.a); store.set("ta2", [...onA]); draw(); return; }
       i.checked ? on.add(i.dataset.k) : on.delete(i.dataset.k); if (i.dataset.k === "bt") store.set("btm", i.checked); else store.set("ind", [...on].filter(k => k !== "bt")); draw(); });
@@ -2529,31 +2541,29 @@ async function vStock(code) {
     });
     const have = new Set(O.map(r => r[0])), mk = [];
     if (BT && on.has("bt") && dly) {
-      const ac = css("--accent");
+      const ac = "#C4A15A";
       BT.t.forEach(t => { if (have.has(t[0])) mk.push({ time: t[0], position: "belowBar", color: ac, shape: "circle", text: "" });
         if (have.has(t[1])) mk.push({ time: t[1], position: "aboveBar", color: t[4] > 0 ? up : dn, shape: "circle", text: "" }); });
       lg(ac, "백테스트 매수(점)·매도(수익 빨강·손실 파랑)");
     }
     if (TA) {
-      if (onA2.has("sr")) {
-        const S2 = (TA.support || []).slice(0, 2), R2 = (TA.resist || []).slice(0, 2), c2 = css("--s2");
-        [...S2, ...R2].forEach(([p]) => cs.createPriceLine({ price: p, color: c2, lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "" }));
-        if (R2.length) lg(c2, "저항 " + R2.map(([p]) => n(p)).join(" · "));
-        if (S2.length) lg(c2, "지지 " + S2.map(([p]) => n(p)).join(" · "));
-      }
+      [["res", TA.resist, "저항"], ["sup", TA.support, "지지"]].forEach(([k2, L2, nm]) => { if (!onA2.has(k2) || !L2?.length) return;
+        const P2 = L2.slice(0, 2);
+        P2.forEach(([p]) => cs.createPriceLine({ price: p, color: OC[k2], lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "" }));
+        lg(OC[k2], nm + " " + P2.map(([p]) => n(p)).join(" · ")); });
       const ts = O.map(r => r[0]);
       const seg2 = (a, b) => { const ia = ts.indexOf(a[0]), ib = ts.indexOf(b[0]);          // 봉마다 점을 찍어야 화면 밖 시작점이 축 범위를 늘리지 않음
         if (ia < 0 || ib <= ia) return [{ time: a[0], value: a[1] }, { time: b[0], value: b[1] }];
         return ts.slice(ia, ib + 1).map((t, j) => ({ time: t, value: a[1] + (b[1] - a[1]) * j / (ib - ia) })); };
       if (onA2.has("tl")) (TA.tl || []).forEach(L => {
-        const col = css("--s1"), o = { priceLineVisible: false, crosshairMarkerVisible: false };
-        const sL = mc.addLineSeries({ ...o, color: col, lineWidth: 2, lastValueVisible: true });
+        const col = OC.tl, o = { priceLineVisible: false, crosshairMarkerVisible: false };
+        const sL = mc.addLineSeries({ ...o, color: col, lineWidth: 1, lastValueVisible: false });
         lg(col, L.name, L.b[1]);
         sL.setData(seg2(L.a, L.b));
         if (L.ch) mc.addLineSeries({ ...o, color: col, lineWidth: 1, lineStyle: 2, lastValueVisible: false }).setData(seg2(L.ch[0], L.ch[1]));
         if (L.brk && have.has(L.brk)) { mk.push({ time: L.brk, position: L.kind === "dn" ? "belowBar" : "aboveBar", color: col, shape: "circle", text: "" }); lg(col, `${L.kind === "dn" ? "빗각 돌파" : "빗각 이탈"}(점) ${dt(L.brk.slice(5))}`); }
       });
-      if (onA2.has("gap") && TA.ov?.gaps) TA.ov.gaps.forEach(([k2, a2, b2]) => { const cg = css("--s4");
+      if (onA2.has("gap") && TA.ov?.gaps) TA.ov.gaps.forEach(([k2, a2, b2]) => { const cg = OC.gap;
         cs.createPriceLine({ price: a2, color: cg, lineWidth: 1, lineStyle: 3, axisLabelVisible: false, title: "" }); lg(cg, `${k2} ${n(a2)}~${n(b2)}`);
         cs.createPriceLine({ price: b2, color: cg, lineWidth: 1, lineStyle: 3, axisLabelVisible: false, title: "" }); });
       if (onA2.has("sig") && d.sigs) {
@@ -2565,13 +2575,13 @@ async function vStock(code) {
         if (SL.length) lg(css("--ink-2"), "신호(화살표) " + SL.slice(-4).reverse().join(" · "));
       }
       if (onA2.has("base") && TA.base) {
-        const B2 = TA.base, cb = css("--s3");
+        const B2 = TA.base, cb = OC.base;
         [[B2.h, "기준봉 고가"], [B2.m, "기준봉 중심"], [B2.o, "기준봉 시가"]].forEach(([p, t]) => cs.createPriceLine({ price: p, color: cb, lineWidth: 1, lineStyle: t === "기준봉 중심" ? 0 : 2, axisLabelVisible: true, title: "" }));
         lg(cb, `기준봉(${dt(B2.d.slice(5))}) 고가 ${n(B2.h)} · 중심 ${n(B2.m)} · 시가 ${n(B2.o)}`);
         if (have.has(B2.d)) mk.push({ time: B2.d, position: "aboveBar", color: cb, shape: "square", text: "" });
       }
-      if (onA2.has("fib") && TA.fib) { TA.fib.levels.forEach(([r, p]) => cs.createPriceLine({ price: p, color: css("--s3"), lineWidth: 1, lineStyle: 1, axisLabelVisible: true, title: "" }));
-        lg(css("--s3"), "피보나치 " + TA.fib.levels.filter(([r]) => [0.382, 0.5, 0.618].includes(r)).map(([r, p]) => `${(r * 100).toFixed(1)}% ${n(p)}`).join(" · ")); }
+      if (onA2.has("fib") && TA.fib) { TA.fib.levels.forEach(([r, p]) => cs.createPriceLine({ price: p, color: OC.fib, lineWidth: 1, lineStyle: 1, axisLabelVisible: true, title: "" }));
+        lg(OC.fib, "피보나치 " + TA.fib.levels.filter(([r]) => [0.382, 0.5, 0.618].includes(r)).map(([r, p]) => `${(r * 100).toFixed(1)}% ${n(p)}`).join(" · ")); }
       if (onA2.has("sw") && TA.fib) {
         const lowFirst = TA.fib.kind === "retr", c3 = css("--ink-2");
         [[TA.fib.a, lowFirst], [TA.fib.b, !lowFirst]].forEach(([pt, isLow]) => { if (have.has(pt[0])) mk.push({ time: pt[0], position: isLow ? "belowBar" : "aboveBar", color: c3, shape: "square", text: "" }); });
@@ -2580,13 +2590,12 @@ async function vStock(code) {
     }
     const fcOn = !!(FC && dly && onA2.has("fc"));
     if (fcOn) {
-      const c0 = O.at(-1)[4], ft = [O.at(-1)[0]], ac = css("--accent");
+      const c0 = O.at(-1)[4], ft = [O.at(-1)[0]];
       for (let x = new Date(O.at(-1)[0] + "T00:00:00Z"); ft.length <= 20;) { x.setUTCDate(x.getUTCDate() + 1); if (x.getUTCDay() % 6) ft.push(x.toISOString().slice(0, 10)); }
-      const path = (q, mid) => ft.map((t, k) => ({ time: t, value: c0 * (1 + (FC[2] * k / 20 + (q - FC[2]) * Math.sqrt(k / 20)) / 100) }));
-      const o2 = { priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false };
-      [[0, 1, 3], [4, 1, 3], [1, 1, 0], [3, 1, 0]].forEach(([qi, w, st2]) => mc.addLineSeries({ ...o2, color: ac + "99", lineWidth: w, lineStyle: st2 }).setData(path(FC[qi])));
-      mc.addLineSeries({ ...o2, color: ac, lineWidth: 2, lineStyle: 2 }).setData(path(FC[2]));
-      LG.push(`<span class="wrap"><i style="background:${ac}"></i> 1개월 예상 <b class="num">${n(c0 * (1 + FC[2] / 100))}</b>(${pct(FC[2], 1)}) · 80% 범위 <b class="num">${n(c0 * (1 + FC[0] / 100))}~${n(c0 * (1 + FC[4] / 100))}</b></span>`);
+      const ac = OC.fc;
+      mc.addLineSeries({ color: ac, lineWidth: 2, lineStyle: 2, priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: false })
+        .setData(ft.map((t, k) => ({ time: t, value: c0 * (1 + FC[2] * k / 20 / 100) })));
+      LG.push(`<span class="wrap"><i style="background:${ac}"></i> 1개월 예상 <b class="num">${n(c0 * (1 + FC[2] / 100))}</b>(${pct(FC[2], 1)}) · 10번 중 8번 범위 ${n(c0 * (1 + FC[0] / 100))}~${n(c0 * (1 + FC[4] / 100))}</span>`);
     }
     if (mk.length) cs.setMarkers(mk.sort((a, b) => a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
     if (pick) { cs.createPriceLine({ price: pick.target, color: up, lineWidth: 1, lineStyle: 2, title: "" }); cs.createPriceLine({ price: pick.stop, color: dn, lineWidth: 1, lineStyle: 2, title: "" });
