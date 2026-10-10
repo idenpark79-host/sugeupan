@@ -183,19 +183,22 @@ def build_panel(prices: dict, meta: pd.DataFrame, market_close: pd.Series, flows
 
 
 # ── 거래 시뮬레이션 ─────────────────────────────────────────────
-def simulate(pn: Panel, kt: float, ks: float, horizon: int, cost: float):
+def simulate(pn: Panel, kt: float, ks: float, horizon: int, cost: float, atr_cap: float | None = None):
     """모든 (종목, 일자)에서 신호가 났다고 가정한 거래 결과.
+    atr_cap: 목표·손절 계산에 쓰는 일평균 변동폭 상한 (변동성 큰 종목의 손절폭이 과도해지지 않게)
     반환: ret(순수익률), hit(목표가 도달), valid(미래 데이터 충분)"""
+    atrp = np.minimum(pn.atrp, atr_cap) if atr_cap else pn.atrp
     N = len(pn.C)
     idx = np.arange(N)
     e = idx + 1
     valid = (idx + horizon < N)
     valid[valid] &= pn.sid[(idx + horizon)[valid]] == pn.sid[valid]
-    valid &= np.isfinite(pn.atrp)
+    valid &= np.isfinite(atrp)
     entry = np.full(N, np.nan)
     entry[valid] = pn.O[e[valid]]
-    tgt = entry * (1 + kt * pn.atrp)
-    stp = entry * (1 - ks * pn.atrp)
+    valid &= entry > 0
+    tgt = entry * (1 + kt * atrp)
+    stp = entry * (1 - ks * atrp)
     ret = np.full(N, np.nan)
     hit = np.zeros(N, bool)
     open_ = valid.copy()
@@ -206,8 +209,10 @@ def simulate(pn: Panel, kt: float, ks: float, horizon: int, cost: float):
         stop_hit = pn.L[jj] <= stp[m]          # 같은 날 둘 다 닿으면 손절로 간주(보수적)
         tgt_hit = (~stop_hit) & (pn.H[jj] >= tgt[m])
         mi = idx[m]
-        r = np.where(stop_hit, np.minimum(pn.O[jj], stp[m]) / entry[m] - 1,
-             np.where(tgt_hit, np.maximum(pn.O[jj], tgt[m]) / entry[m] - 1, np.nan))
+        with np.errstate(invalid="ignore", divide="ignore"):
+            oj = np.where(pn.O[jj] > 0, pn.O[jj], np.nan)          # 시가 누락일은 목표·손절가로 체결 가정
+            r = np.where(stop_hit, np.fmin(oj, stp[m]) / entry[m] - 1,
+                 np.where(tgt_hit, np.fmax(oj, tgt[m]) / entry[m] - 1, np.nan))
         done = stop_hit | tgt_hit
         ret[mi[done]] = r[done]
         hit[mi[tgt_hit]] = True
