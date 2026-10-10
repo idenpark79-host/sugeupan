@@ -106,4 +106,4 @@ def _summary(tr: pd.DataFrame) -> dict:
 
 
 def summary(tr: pd.DataFrame) -> dict:
-    return {"h": {str(h): _summary(tr[tr.h == h]) for h in (5, 20)}}
+    return {"h": {str(h): _summary(tr[tr.h == h]) for h in (5, 20, 60)}}

@@ -604,7 +604,29 @@ tr.cur td{background:var(--accent-soft);font-weight:600}
 .chip.oc i{width:10px;height:3px;border-radius:1px}
 .chip.oc[aria-pressed="false"]{color:var(--muted)} .chip.oc[aria-pressed="false"] i{opacity:.35}
 .chip.oc[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--ink);font-weight:600}
-
+/* 추천 카드 */
+.pk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:12px}
+.rrb{margin:12px 0 10px}
+.rrb .bar{position:relative;height:6px;border-radius:3px;background:var(--sunk);overflow:hidden}
+.rrb .bar .dn{position:absolute;left:0;top:0;bottom:0;background:var(--down);opacity:.25}
+.rrb .bar .upz{position:absolute;top:0;bottom:0;background:var(--up);opacity:.25}
+.rrb .bar i{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink);transform:translateX(-1px)}
+.rrb .lab{display:flex;justify-content:space-between;gap:6px;font-size:12px;color:var(--muted);margin-top:6px} .rrb .lab span{white-space:nowrap}
+.rrb .lab b{font-size:13px} .rrb .lab .r{text-align:right}
+.pk-story p{font-size:14px;line-height:1.7;color:var(--ink);margin:0 0 6px}
+.pk-story p.past{font-size:12.5px;color:var(--muted);margin-top:8px}
+.pk-ev{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}
+.pk-ev span{display:flex;flex-direction:column;gap:1px;padding:6px 8px;border:1px solid var(--line);border-radius:4px;color:var(--muted)}
+.pk-ev span small{font-size:11px} .pk-ev span b{font-size:13px;font-weight:600}
+.pk-ev span.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)} .pk-ev span.on b{color:var(--ink)}
+.pk-n small{color:var(--muted);font-size:12px;margin-left:2px}
+.list .nm small.hp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;line-height:1.5}
+@media (max-width:640px){ .pk-grid{grid-template-columns:1fr} .pk-ev{grid-template-columns:repeat(2,1fr)} }
+.warnbox{margin:0 16px 14px;padding:10px 14px;background:var(--sunk);border-left:3px solid var(--line-strong);font-size:13px;line-height:1.7;color:var(--ink-2)}
+.pickbox .tbl+div,.pickbox .scroll+.pk-story{margin-top:12px}
+.pickbox .scroll{margin:8px 0 12px}
+.pk>.rrb,.pk>.pk-story,.pk>.pk-ev{margin-left:16px;margin-right:16px}
+.pk>.pk-ev{margin-bottom:16px}
 </style>
 
 <div class="app">
@@ -716,7 +738,7 @@ const ico = k => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${IC[k
 /* 메뉴 */
 const NAV = [
   ["국내증시", [["home", "시장 개요"], ["sector", "섹터·테마"], ["map", "업종 맵"], ["rank", "순위 분석"], ["flows", "투자자 동향"]]],
-  ["투자정보", [["op", "투자의견"], ["ai", "추천종목"], ["pat", "기술적 신호"], ["edu", "차트 공부"], ["bt", "전략 검증"], ["screen", "조건검색"], ["cmp", "종목 비교"]]],
+  ["투자정보", [["op", "투자의견"], ["ai", "추천종목"], ["pat", "기술적 신호"], ["edu", "차트 공부"], ["screen", "조건검색"], ["cmp", "종목 비교"]]],
   ["MY", [["watch", "관심종목"], ["pf", "보유종목"]]]
 ];
 const ICON_OF = { sector: "sector", op: "op", home: "home", map: "map", rank: "rank", flows: "flows", ai: "ai", bt: "bt", pat: "pat", edu: "edu", screen: "screen", cmp: "cmp", watch: "watch", pf: "pf" };
@@ -939,9 +961,9 @@ async function boot() {
     if (!S.meta || !stocks) throw new Error("data");
     S.list = stocks.rows.map(x => Object.fromEntries(stocks.fields.map((k, i) => [k, x[i]])));
     S.list.forEach(s => { S.by[s.code] = s; s.cho = cho(s.name).replace(/\s/g, ""); s.lname = s.name.toLowerCase().replace(/\s/g, ""); });
-    S.pick5 = {};
-    (recH(20)?.picks || []).forEach((p, i) => S.pick[p.code] = { ...p, rank: i + 1, H: 20 });
-    (recH(5)?.picks || []).forEach((p, i) => S.pick5[p.code] = { ...p, rank: i + 1, H: 5 });
+    S.pickH = {};
+    [60, 5, 20].forEach(h => { S.pickH[h] = {}; (recH(h)?.picks || []).forEach((p, i) => { const x = { ...p, rank: i + 1, H: h }; S.pickH[h][p.code] = x; S.pick[p.code] = x; }); });
+    S.pick5 = S.pickH[5];
     S.sectors = sectorAgg(S.list);
     $("#asof").textContent = `${dt(S.meta.asof)} 종가`;
     drawNav();
@@ -1068,8 +1090,8 @@ VIEWS.home = function () {
       ${card("투자자별 매매동향", seg("hm", [["KOSPI", "코스피"], ["KOSDAQ", "코스닥"]], st.homeMk), `<div id="hflow"></div>`)}
     </div>
     <div class="g2 w mt">
-      ${cardF("추천종목 <small>스윙 · 1개월</small>", `<a class="more" href="#ai">전체 ${P.length}종목</a>`, homePicks(P))}
-      ${card("전략 검증 <small>스윙 · 10종목 분산</small>", `<a class="more" href="#bt">상세</a>`, btTeaser())}
+      ${cardF("추천종목 <small>스윙 · 1개월</small>", `<a class="more" href="#ai">전체 보기</a>`, homePicks(P, 20))}
+      ${cardF("추천종목 <small>중장기 · 3개월</small>", `<a class="more" href="#ai" data-h="60" id="h60">전체 보기</a>`, homePicks(recH(60)?.picks || [], 60))}
     </div>
     ${sigBoard()}
     <div class="g2 mt">
@@ -1085,6 +1107,7 @@ VIEWS.home = function () {
   bindTh(v);
   $$("[data-sgk]", v).forEach(a => a.onclick = () => { const F = st.scr ||= store.get("scr", { mk: "ALL", sec: "", r: {}, t: [] }); F.r = {}; F.t = []; F.sec = ""; F.sg = a.dataset.sgk; store.set("scr", F); location.hash = "screen"; });
   bindGo(v);
+  $$(".more[href='#ai']", v).forEach(a => a.onclick = () => { st.aiH = a.dataset.h ? +a.dataset.h : 20; });
 };
 function sigBoard() {
   const R = S.pat?.rows || [];
@@ -1139,14 +1162,13 @@ function briefing() {
   if (P) L.push(["추천", R.gate && !R.regime ? "코스피 20일 이동평균 하락 — 스윙 신규 매수 보류." : P.length ? `스윙 1위 <a href="#stock-${P[0].code}"><b>${esc(P[0].name)}</b></a> 목표가 ${n(P[0].target)}원(<b class="up">${pct(P[0].tgtPct, 1)}</b>) · 예상 적중률 ${p1(P[0].prob)}%${P[1] ? `, ${P.slice(1, 3).map(p => esc(p.name)).join("·")}` : ""} 등 ${P.length}종목.` : "기대수익률 양(+) 종목 부재 — 관망."]);
   return L.map(([k, t]) => `<div class="r"><span class="k">${k}</span><p>${t}</p></div>`).join("");
 }
-function homePicks(P) {
-  if (!P.length) return `<div class="empty">금일 기대수익률이 양(+)인 종목이 없습니다.</div>`;
-  return `<div class="scroll"><table class="tbl"><thead><tr><th class="l">종목</th><th class="l hide-m">투자포인트</th><th>현재가</th><th>목표가</th><th>적중률</th></tr></thead><tbody>
-    ${P.slice(0, 6).map((p, i) => `<tr data-go="${p.code}"><td class="l"><span class="nm"><b>${esc(p.name)}</b><small>${p.op ? opTag(p.op.lv) : ""}</small></span></td>
-      <td class="l hide-m" style="white-space:normal;max-width:240px"><span class="lbl" style="color:var(--ink-2)">${p.type ? esc(p.type.type) : ""}</span><br><span class="lbl">${p.view ? esc(p.view.head) : ""}</span></td>
-      <td class="num">${n(p.close)}<br><small class="${cls(p.pct)}">${pct(p.pct)}</small></td>
-      <td class="num up">${n(p.target)}<br><small>${pct(p.tgtPct, 1)}</small></td>
-      <td class="num"><b>${p1(p.prob)}%</b></td></tr>`).join("")}</tbody></table></div>`;
+function homePicks(P, H) {
+  if (!P.length) return `<div class="empty">오늘은 조건을 만족하는 종목이 없습니다.</div>`;
+  const V = recH(H)?.val;
+  return `<div class="list">${P.slice(0, 5).map((p, i) => `<button class="row" data-go="${p.code}"><span class="rk num">${i + 1}</span>
+      <span class="nm"><b>${esc(p.name)} ${p.op?.lv != null ? opTag(p.op.lv) : ""}</b><small class="hp">${esc((p.story || [])[0] || "")}</small></span>
+      <span class="v num"><b class="up">${pct(p.tgtPct, 0)}</b><small>목표</small></span></button>`).join("")}</div>
+    ${V ? `<p class="note" style="padding:10px 16px 12px">과거 같은 방법: ${HZP(H)} 평균 ${pct(V.avg)} (시장 ${pct(V.mkt)}) · 수익 마감 ${p1(V.win)}%</p>` : ""}`;
 }
 function btTeaser() {
   const V = btMain(); if (!V) return `<div class="empty">전략 검증 결과가 아직 없습니다.</div>`;
@@ -1381,8 +1403,8 @@ function drawFlowLists() {
 
 /* ── 추천종목 ── */
 st.aiH = 20; st.btH = 20;
-const HZL = h => +h === 5 ? "단기" : "스윙";
-const HZP = h => +h === 5 ? "1주" : "1개월";
+const HZL = h => ({ 5: "단기", 20: "스윙", 60: "중장기" })[+h] || "스윙";
+const HZP = h => ({ 5: "1주", 20: "1개월", 60: "3개월" })[+h] || "1개월";
 const TONE_N = { "상승": 1, "중립": 0, "하락": -1, "긍정적": 1, "부정적": -1, "강세": 1, "약세": -1 };
 const toneChip = (t, head = "") => head.startsWith(t + " 추세") ? "" : `<span class="tone t${TONE_N[t] ?? 0}">${t === "중립" ? "추세 중립" : t + " 추세"}</span>`;
 const GRADE_TOP = { S: 2, A: 5, B: 10 };
@@ -1410,122 +1432,54 @@ function wakeSvg(closes, price, target, stop, H, w) {
 }
 function drawWakes(root = document) {
   $$("[data-wake]", root).forEach(async el => {
-    const code = el.dataset.wake, H = +el.dataset.h, p = (H === 5 ? S.pick5 : S.pick)[code];
+    const code = el.dataset.wake, H = +el.dataset.h, p = S.pickH?.[H]?.[code];
     const d = await detail(code);
     if (!d || !p || !el.isConnected) return;
     el.innerHTML = wakeSvg(d.ohlcv.map(r => r[4]), p.close, +el.dataset.t || p.target, +el.dataset.s || p.stop, H, Math.max(el.clientWidth, 240));
   });
 }
-const STY = [["safe", "보수형"], ["base", "중립형"], ["aggr", "공격형"]];
-const STY_L = Object.fromEntries(STY);
-const pv = (p, k = st.aiS) => { const s = p.st?.[k]; return s ? { ...p, tgtPct: s[0], stpPct: s[1], target: s[2], stop: s[3], prob: s[4], exp: s[5] } : p; };
-/* 추천 종목 리포트 카드 */
-function pickBody(p, H, g, sub) {
-  const vw = p.view, ty = p.type;
-  return `<div class="pk-nums num">
-      <div><div class="k">목표가</div><div class="v up">${n(p.target)}</div><div class="s">상승여력 ${pct(p.tgtPct, 1)}</div></div>
-      <div><div class="k">손절가</div><div class="v down">${n(p.stop)}</div><div class="s">${pct(p.stpPct, 1)}</div></div>
-      <div><div class="k">예상 적중률</div><div class="v">${p1(p.prob)}%</div><div class="s">${sub ?? "&nbsp;"}</div></div>
-      <div><div class="k">기대수익률</div><div class="v ${cls(p.exp)}">${pct(p.exp)}</div><div class="s">보유 ${H}영업일</div></div>
-    </div>
-    <dl class="pk-why">
-      ${ty ? `<dt>투자포인트</dt><dd class="ps"><span class="ty">${esc(ty.type)}</span> ${esc(ty.text)}</dd>` : ""}
-      ${vw ? `<dt>기술적 분석</dt><dd>${toneChip(vw.tone, vw.head)}${esc(vw.head)}</dd>` : ""}
-      ${p.why?.length ? `<dt>선정 사유</dt><dd>${p.why.slice(0, 3).map(esc).join(" · ")}</dd>` : ""}
-    </dl>`;
+/* 추천 카드 — 손절·현재·목표 막대 + 쉬운 설명 + 근거 4가지 */
+function rrBar(p) {
+  const x = clamp((p.close - p.stop) / ((p.target - p.stop) || 1) * 100, 0, 100);
+  return `<div class="rrb"><div class="bar"><span class="dn" style="width:${x}%"></span><span class="upz" style="left:${x}%;width:${100 - x}%"></span><i style="left:${x}%"></i></div>
+    <div class="lab num"><span>손절 <b class="down">${n(p.stop)}</b> <small>${pct(p.stpPct, 0)}</small></span><span class="c">기준 <b>${n(p.close)}</b></span><span class="r">목표 <b class="up">${n(p.target)}</b> <small>${pct(p.tgtPct, 0)}</small></span></div></div>`;
 }
-function pickCard(p0, i, H, g) {
-  const p = pv(p0);
-  const sub = st.aiS === "base" && g?.[p.grade] ? `과거 ${p1(g[p.grade][1])}%` : `${STY_L[st.aiS] || ""} 기준`;
+function pickBody(p, past = true) {
+  const T = (p.story || []).slice(0, past ? 99 : -1).concat(past ? [] : [""]);
+  return `${rrBar(p)}
+    <div class="pk-story">${T.slice(0, -1).map(x => `<p>${esc(x)}</p>`).join("")}${T.length > 1 && T.at(-1) ? `<p class="past">${esc(T.at(-1))}</p>` : ""}</div>
+    <div class="pk-ev">${(p.ev || []).map(([k, x, ok]) => `<span class="${ok ? "on" : ""}"><small>${k}</small><b>${x}</b></span>`).join("")}</div>`;
+}
+function pickCard(p, i) {
+  const s = S.by[p.code] || {};
   return `<article class="pk" data-go="${p.code}" tabindex="0" role="link" aria-label="${esc(p.name)} 상세">
-    <div class="pk-h"><div class="pk-n"><span class="rk num">${i + 1}</span><b>${esc(p.name)}</b><small class="num">${p.code}</small>${p.op ? opTag(p.op.lv) : ""}</div>
-      <div class="pk-px num"><b>${n(p.close)}</b><small class="${cls(p.pct)}">${pct(p.pct)}</small></div></div>
-    <div class="pk-c"><div data-wake="${p.code}" data-h="${H}" data-t="${p.target}" data-s="${p.stop}" style="height:84px"></div></div>
-    ${pickBody(p, H, g, sub)}</article>`;
+    <div class="pk-h"><div class="pk-n"><span class="rk num">${i + 1}</span><b>${esc(p.name)}</b>${p.op?.lv != null ? opTag(p.op.lv) : ""}<small>${esc(p.theme || "")}</small></div>
+      <div class="pk-px num"><b>${n(s.price ?? p.close)}</b><small class="${cls(s.pct)}">${pct(s.pct)}</small></div></div>
+    ${pickBody(p, false)}</article>`;
 }
 VIEWS.ai = function () {
   if (!S.rec?.ok) { page(`<div class="ph"><div><h1>추천종목</h1></div></div><div class="card empty">추천종목 산출 결과가 아직 없습니다.</div>`); return; }
-  const hs = [20, 5].filter(h => recH(h));
-  if (!hs.includes(+st.aiH)) st.aiH = hs[0];
-  const v = page(`<div class="ph"><div><h1>추천종목</h1><p>${dt(S.meta.asof)} 종가 기준 · 익일 시가 매수 가정 · 퀀트 스코어와 기술적 분석으로 선정</p><p class="lbl" style="margin-top:4px">추천 순위는 목표가·손절가로 사고팔 때의 기대 수익 순서이고, 투자의견은 다음 1개월 시장 대비 순위입니다. 기준이 달라 순위와 의견이 다를 수 있으며, 둘 다 좋은 종목이 더 확실한 후보입니다.</p></div></div>
-    ${seg("aih", hs.map(h => [h, `${HZL(h)}<small>${HZP(h)} 보유</small>`]), st.aiH, "hz")}
-    <div id="aib" style="margin-top:16px"></div>`);
-  st.aiS = store.get("aiS", "base");
-  onSeg(v, "aih", x => { st.aiH = +x; drawAI(); });
-  drawAI();
-};
-function drawAI() {
-  const H = +st.aiH, R = recH(H), M = R.model, T = S.track?.h?.[H] || {}, P = R.picks, g = M.grades || {};
-  const SM = M.styles || {}, bk = SM.base ? SM.base.slice(0, 2).join() : "";
-  const sty = STY.filter(([k]) => SM[k] && (k === "base" || SM[k].slice(0, 2).join() !== bk));
-  if (!sty.some(([k]) => k === st.aiS)) st.aiS = "base";
-  const S0 = SM[st.aiS], PV = P.map(p => pv(p));
-  const avgT = PV.length ? sum(PV.map(p => p.tgtPct)) / PV.length : null, avgS = PV.length ? sum(PV.map(p => p.stpPct)) / PV.length : null;
-  const BV = S.bt?.ok ? S.bt.variants[st.aiS === "base" ? `${H}_10` : `${H}_10_${st.aiS}`] : null;
-  const el = $("#aib");
-  const exits = (M.exits || []).slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-  const STY_D = { safe: "목표가를 가깝게 설정 — 적중률 우선, 1회 수익은 제한적", base: `적중률 ${Math.round((M.minWin || .6) * 100)}% 이상 조건에서 평균 수익률이 가장 높은 기준`, aggr: "목표가를 멀리 설정 — 적중률은 낮지만 1회 수익 확대" };
-  el.innerHTML = `
-    ${R.gate ? (R.regime ? `<div class="regime"><b>시장 국면 · 매수 유효</b><span>코스피 20일 이동평균 상승 중</span></div>`
-      : `<div class="regime off"><b>시장 국면 · 신규 매수 보류</b><span>코스피 20일 이동평균 하락 중 — 전략 검증에서도 이 구간은 신규 매수를 하지 않았습니다.</span></div>`) : ""}
-    ${sty.length > 1 ? `<div class="sty"><span class="lbl">청산 기준</span>${seg("ais", sty.map(([k, l]) => [k, `${l}<small class="num">${p1(SM[k][3])}%</small>`]), st.aiS)}<span class="note">${STY_D[st.aiS]}</span></div>` : ""}
-    <div class="summ num">
-      ${S0 ? `<div><span class="v">${p1(S0[3])}%</span><span class="k">과거 적중률 (일별 상위 ${M.topN})</span></div>
-      <div><span class="v ${cls(S0[2])}">${pct(S0[2])}</span><span class="k">1회 평균 수익률</span></div>` :
-      `<div><span class="v">${g.S ? p1(g.S[1]) + "%" : "-"}</span><span class="k">스코어 상위 2% 과거 적중률</span></div>
-      <div><span class="v ${cls(g.S?.[0])}">${g.S ? pct(g.S[0]) : "-"}</span><span class="k">스코어 상위 2% 1회 평균</span></div>`}
-      ${avgT != null ? `<div><span class="v"><span class="up">${pct(avgT, 1)}</span> <span class="down">${pct(avgS, 1)}</span></span><span class="k">평균 목표 · 손절</span></div>` : ""}
-      ${BV ? `<a href="#bt"><span class="v ${cls(BV.m.cagr)}">${pctf(BV.m.cagr, 0)}</span><span class="k">전략 연환산 수익률 · 코스피 ${pctf(BV.kospi.cagr, 0)}</span></a>` : ""}
-    </div>
-    ${BV && BV.m.cagr < BV.kospi.cagr ? `<p class="note" style="margin:-6px 0 14px">해당 기준은 전략 검증에서 코스피 대비 부진했습니다. 참고 지표로 활용하십시오.</p>` : ""}
-    ${P.length ? `<div class="pks">${P.map((p, i) => pickCard(p, i, H, g)).join("")}</div>` : `<div class="card empty">금일 기대수익률이 양(+)인 종목이 없습니다.</div>`}
-
-    <h2 class="ph2">추천 성과 추적</h2>
-    ${cardF(`${HZL(H)} 추천 이력`, seg("trt", [["open", `보유 중 ${T.open || 0}`], ["closed", `청산 ${T.closed || 0}`]], st.trTab),
-      `<div class="scroll"><table class="tbl"><thead><tr><th class="l">추천일</th><th class="l">종목</th><th>매수가</th><th>목표가</th><th>손절가</th><th>수익률</th><th>보유일</th><th>상태</th></tr></thead><tbody id="trb"></tbody></table></div>`)}
-    <div class="g2 mt">
-      ${card("성과 요약", T.since ? `<span class="lbl">${dt(T.since)} 이후</span>` : "", T.closed ? `<div class="kv2 num" style="gap:12px 20px">
-          <div><span>청산</span><b>${T.closed}건</b></div><div><span>적중률</span><b>${p1(T.win * 100)}%</b></div>
-          <div><span>평균 수익률</span><b class="${cls(T.avg)}">${pctf(T.avg, 2)}</b></div><div><span>추천 시 기대</span><b>${T.expectedAvg != null ? pctf(T.expectedAvg, 2) : "-"}</b></div>
-          <div><span>최고</span><b class="up">${pctf(T.best)}</b></div><div><span>최저</span><b class="down">${pctf(T.worst)}</b></div></div>`
-        : `<p class="note">매일 상위 10종목을 기록해 실제 시세로 성과를 집계합니다. 첫 집계는 ${HZP(H)} 후 표시됩니다.</p>`)}
-      ${card("월별 평균 수익률", "", vbars(T.monthly && T.monthly.map(m => [m[0], m[1] * 100, m[2], m[3]]), "월별 실제 평균 수익률"))}
-    </div>
-
-    <h2 class="ph2">성과 검증</h2>
-    <p class="note" style="margin:-4px 0 12px">${dt(M.oos[0])} ~ ${dt(M.oos[1])} · 워크포워드 방식(각 시점 이전 데이터로만 학습)${R.gate ? " · 시장 국면 필터 적용" : ""}</p>
-    <div class="g2 al">
-      <div class="stack">
-      ${cardF("투자의견별 성과", `<span class="lbl">목표 ATR×${R.kt} · 손절 ATR×${R.ks}</span>`, `<table class="tbl"><thead><tr><th class="l">투자의견</th><th>평균 수익률</th><th>적중률</th><th>표본</th></tr></thead><tbody>
-        ${["S", "A", "B"].filter(k => g[k]).map(k => `<tr><td class="l"><b>스코어 상위 ${GRADE_TOP[k]}%</b></td><td class="num ${cls(g[k][0])}"><b>${pct(g[k][0])}</b></td><td class="num"><b>${p1(g[k][1])}%</b></td><td class="num flat">${g[k][2].toLocaleString()}</td></tr>`).join("")}
-        <tr><td class="l flat">전 종목 평균</td><td class="num ${cls(M.baseAvg)}">${pct(M.baseAvg)}</td><td class="num">${p1(M.baseWin)}%</td><td class="num flat">${(M.nOos || 0).toLocaleString()}</td></tr>
-        ${M.off ? `<tr><td class="l flat">매수 보류 구간 상위 ${M.topN}</td><td class="num ${cls(M.off[0])}">${pct(M.off[0])}</td><td class="num">${p1(M.off[1])}%</td><td></td></tr>` : ""}
-        </tbody></table>`)}
-      ${cardF("청산 기준별 성과", `<span class="lbl">일별 상위 ${M.topN}종목</span>`, `<div class="scroll"><table class="tbl"><thead><tr><th class="l">목표 · 손절 (ATR 배수)</th><th>평균 수익률</th><th>적중률</th><th class="hide-m">전 종목</th></tr></thead><tbody>
-        ${exits.map(x => { const on = x[0] === R.kt && x[1] === R.ks, sk = Object.entries(SM).find(([, v]) => v[0] === x[0] && v[1] === x[1])?.[0];
-          return `<tr${on ? ' style="background:var(--accent-soft)"' : ""}><td class="l">${on ? "<b>" : ""}×${x[0]} · ×${x[1]}${on ? "</b>" : ""}${sk ? ` <span class="lbl">${STY_L[sk]}</span>` : ""}</td><td class="num ${cls(x[2])}">${pct(x[2])}</td><td class="num">${p1(x[3])}%</td><td class="num hide-m flat">${pct(x[4])} · ${p1(x[5])}%</td></tr>`; }).join("")}
-        </tbody></table></div><p class="note" style="padding:8px 16px 12px">목표가를 가깝게 둘수록 적중률은 오르고 1회 수익은 줄어듭니다. 중립형은 적중률 ${Math.round((M.minWin || .6) * 100)}% 이상 조건에서 평균 수익률이 가장 높은 기준입니다.</p>`)}
-      </div>
-      <div class="stack">
-      ${card("스코어 10분위별 평균 수익률", "", `${vbars(M.deciles.map((d, i) => [`${i + 1}`, d[0], d[1], d[2]]), "스코어 분위별 평균 수익률", M.baseAvg)}<p class="note" style="margin-top:4px">1분위 = 스코어 하위 10%, 10분위 = 상위 10% · 점선은 전 종목 평균</p>`)}
-      ${card(`월별 성과 <small>일별 상위 ${M.topN}종목</small>`, "", `${vbars(M.monthly, "월별 검증 평균 수익률", M.baseAvg)}<p class="note" style="margin-top:4px">월별 1회 평균 수익률 · 점선은 전 종목 평균</p>`)}
-      </div>
-    </div>
-    <p class="note mt">${S.rec.nStocks}개 종목(시가총액 1조 원 이상), ${M.years}년 일봉 기반. 이동평균·RSI·MACD·볼린저밴드·거래량·캔들${S.rec.usedFlows ? "·외국인·기관·연기금 수급" : ""}·시장 국면 등 97개 지표로 퀀트 스코어를 산출하며 매 영업일 재학습합니다. 현재 상장 종목만 대상으로 해 생존 편향이 있습니다.</p>`;
-  const drawTr = () => {
-    const rows = (st.trTab === "open" ? T.openRows : T.closedRows) || [], open = st.trTab === "open";
-    $("#trb").innerHTML = rows.map(r => `<tr data-go="${r[1]}"><td class="l num">${dt(r[0].slice(5))}</td><td class="l"><b>${esc(r[2])}</b></td>
-      <td class="num">${r[9] ? n(r[9]) : "-"}</td><td class="num">${n(r[6])}</td><td class="num">${n(r[7])}</td>
-      <td class="num ${cls(r[10])}">${r[10] == null ? "-" : pct(r[10])}</td><td class="num">${r[11] == null ? "-" : r[11] + "일"}</td>
-      <td>${open ? `<span class="st">${r[9] ? "보유 중" : "매수 대기"}</span>` : `<span class="st ${r[10] > 0 ? "win" : "loss"}">${r[10] > 0 ? "수익 청산" : "손실 청산"}</span>`}</td></tr>`).join("") || `<tr><td colspan="8" class="empty">추천 이력이 없습니다.</td></tr>`;
-    bindGo($("#trb"));
+  const hs = [5, 20, 60].filter(h => recH(h));
+  if (!hs.includes(+st.aiH)) st.aiH = hs.includes(20) ? 20 : hs[0];
+  const v = page(`<div class="ph"><div><h1>추천종목</h1><p>${dt(S.rec.asof || S.meta.asof)} 종가 기준 · 투자의견 매수 이상 종목 중 보유 기간별 점수 상위 10개</p></div>
+      <div class="controls">${seg("aih", hs.map(h => [h, `${HZL(h)} ${HZP(h)}`]), st.aiH)}</div></div>
+    <section class="card" id="aival"></section>
+    <div class="pk-grid mt" id="apicks"></div>
+    <p class="note mt">손절가는 종목의 평소 변동폭에 맞춰 잡았고 목표가는 손절폭의 2배(손익비 2:1)입니다. 과거 성적은 학습에 쓰지 않은 기간에 같은 규칙으로 매일 고른 종목을 다음 날 시가에 사서, 목표가·손절가·보유 기간 만료 중 먼저 오는 때 판 결과입니다(거래비용 0.25% 차감). 과거 성적이 미래 수익을 보장하지 않습니다.</p>`);
+  const draw = () => {
+    const H = +st.aiH, R = recH(H), V = R.val || {}, P = R.picks || [];
+    const cell = (x, k) => `<div><span class="v">${x}</span><span class="k">${k}</span></div>`;
+    $("#aival").innerHTML = `<div class="card-h"><h2>이 방법으로 골랐다면 <small>${V.from ? `${dt(V.from)} ~ ${dt(V.to)} · ` : ""}${(V.n || 0).toLocaleString()}번 추천 기준</small></h2></div>${R.rule ? `<p class="lbl" style="padding:12px 16px 0;font-size:12.5px">고르는 방법: ${esc(R.rule)}</p>` : ""}
+      <div class="card-b"><div class="summ num">${cell(`<span class="${cls(V.avg)}">${pct(V.avg)}</span>`, `추천 종목 ${HZP(H)} 평균`)}${cell(`<span class="${cls(V.ew)}">${pct(V.ew)}</span>`, "일반 종목 평균")}
+        ${cell(`<span class="${cls(V.mkt)}">${pct(V.mkt)}</span>`, "시장 지수")}${cell(`${p1(V.win)}%`, "수익으로 끝난 비율")}${cell(`<span class="up">${pct(V.up, 0)}</span> / <span class="down">${pct(V.dn, 0)}</span>`, "오를 때 / 내릴 때 평균")}</div>
+      <p class="note" style="margin-top:10px">${V.ew > 0.1 && V.avg >= V.ew * 1.5 ? `추천 종목은 같은 기간 일반 종목 평균의 ${n(V.avg / V.ew, 1)}배를 벌었습니다. ` : ""}${V.avg < V.mkt ? `다만 대형주가 이끈 시장 지수(${pct(V.mkt)})보다는 낮았습니다. ` : `시장 지수(${pct(V.mkt)})보다도 높았습니다. `}수익 종목의 상승폭이 손실 종목의 하락폭보다 커서 평균이 플러스가 되는 구조라, 한두 종목보다 여러 종목에 나눠 담는 것이 과거 성적에 가깝습니다.</p></div>`;
+    if (V.avg - V.ew < 0.3) $("#aival").insertAdjacentHTML("beforeend", `<p class="warnbox">${HZL(H)} 추천은 과거 검증에서 일반 종목 평균과 차이가 거의 없었습니다. ${HZP(H)} 같은 짧은 기간의 주가는 운의 영향이 커서 예측이 어렵습니다. 참고용으로만 보세요.</p>`);
+    $("#apicks").innerHTML = P.map((p, i) => pickCard(p, i)).join("") || `<div class="card empty">오늘은 조건을 만족하는 종목이 없습니다.</div>`;
+    bindGo($("#apicks"));
   };
-  onSeg(el, "trt", x => { st.trTab = x; drawTr(); });
-  onSeg(el, "ais", x => { st.aiS = x; store.set("aiS", x); drawAI(); });
-  drawTr(); renderVB(el); drawWakes(el); bindGo(el);
-}
-
-/* ── 백테스트 ── */
+  onSeg(v, "aih", x => { st.aiH = +x; draw(); });
+  draw();
+};
 VIEWS.bt = function () {
   const B = S.bt;
   if (!B?.ok) { page(`<div class="ph"><div><h1>전략 검증</h1></div></div><div class="card empty">전략 검증 결과가 아직 없습니다. 다음 정기 갱신 후 표시됩니다.</div>`); return; }
@@ -1695,7 +1649,7 @@ const SCR = [
 ];
 const SCR_T = [["align1", "정배열", s => s.align === 1], ["alignm", "역배열", s => s.align === -1], ["nh", "52주 신고가", s => s.nh === 1], ["nl", "52주 신저가", s => s.nl === 1],
   ["lead5", "주도섹터 상위 5", s => (thBy(thOf(s))?.rank ?? 99) <= 5], ["op2", "강력매수", s => s.op === 2], ["op1", "매수 이상", s => s.op >= 1], ["opm", "매도 이하", s => s.op != null && s.op <= -1],
-  ["ai", "스윙 추천종목", s => !!S.pick[s.code]], ["ai90", "퀀트 스코어 90 이상", s => s.ai20 >= 90], ["tone1", "기술적 추세 상승", s => s.tone === 1],
+  ["ai", "스윙 추천종목", s => !!S.pick[s.code]], ["ai90", "투자의견 점수 90 이상", s => s.opS >= 90], ["tone1", "기술적 추세 상승", s => s.tone === 1],
   ["watch", "관심종목만", s => watchList().includes(s.code)]];
 const PRESETS = [
   ["하락 빗각 돌파", { sg: "tl_dn_brk" }],
@@ -2397,7 +2351,8 @@ function sigHist(list) {
 function kSum(s, d, F) {
   const op = d.op, w = d.view, ta = w?.ta || {}, fc = op?.fc, sh = d.short, R = [], px = d.ohlcv.at(-1)[4];
   if (op) R.push(["투자의견", `${opTag(op.lv)} ${esc(op.why?.[0] || OPL[op.lv])}`]);
-  if (fc) R.push(["1개월 예상", `중앙값 <b class="${cls(fc[2])}">${pct(fc[2], 1)}</b>(${n(px * (1 + fc[2] / 100))}원) · 10번 중 8번은 ${pct(fc[0], 1)} ~ ${pct(fc[4], 1)} 사이${S.th?.fc ? ` <span class="lbl">(검증 기간 실제 적중 ${p1(S.th.fc.c80)}%)</span>` : ""}`]);
+  const fm = fc ? (fc[5] ?? fc[2]) : null;
+  if (fc) R.push(["1개월 예상", `평균 <b class="${cls(fm)}">${pct(fm, 1)}</b>(${n(px * (1 + fm / 100))}원) · 10번 중 8번은 ${pct(fc[0], 1)} ~ ${pct(fc[4], 1)} 사이${S.th?.fc ? ` <span class="lbl">(검증 기간 실제 적중 ${p1(S.th.fc.c80)}%)</span>` : ""}`]);
   if (w) R.push(["추세", esc(w.head)]);
   const S1 = ta.support?.[0]?.[0], R1 = ta.resist?.[0]?.[0];
   if (S1 || R1) R.push(["가격대", [S1 ? `지지 <b>${n(S1)}</b>` : "", R1 ? `저항 <b>${n(R1)}</b>` : ""].filter(Boolean).join(" · ")]);
@@ -2434,7 +2389,7 @@ async function vStock(code) {
   if (!s) { page(`<div class="card empty">종목을 찾을 수 없습니다.</div>`); return; }
   document.title = `${s.name} · Wake`;
   store.set("recent", [code, ...store.get("recent", []).filter(c => c !== code)].slice(0, 8));
-  const pick = S.pick[code], pick5 = S.pick5?.[code], inW = watchList().includes(code);
+  const PKS = [20, 5, 60].map(h => S.pickH?.[h]?.[code]).filter(Boolean), pick = PKS[0], pick5 = null, inW = watchList().includes(code);
   const kv = [["고가", `<span class="up">${n(s.high)}</span>`], ["저가", `<span class="down">${n(s.low)}</span>`], ["거래량", n(s.vol, 0)],
     ["거래대금", eok(s.amt, false)], ["시가총액", eok(s.cap, false)], ["PER · PBR", `${s.per ? n(s.per, 1) + "배" : "-"} · ${s.pbr ? n(s.pbr, 2) + "배" : "-"}`], ["배당수익률", s.div != null ? n(s.div, 2) + "%" : "-"],
     ["외국인 보유율", s.frg != null ? n(s.frg, 2) + "%" : "-"], ["거래량 (20일 평균 대비)", s.volr != null ? n(s.volr, 1) + "배" : "-"]];
@@ -2444,8 +2399,8 @@ async function vStock(code) {
       <div class="controls"><button class="btn ${inW ? "" : "pri"}" id="wbtn" type="button">${inW ? "관심종목 해제" : "관심종목 추가"}</button><button class="btn" id="cbtn" type="button">비교 추가</button><button class="btn" id="lbtn" type="button">링크 복사</button>
         <a class="btn" href="https://finance.naver.com/item/news.naver?code=${code}" target="_blank" rel="noopener">뉴스</a>
         <a class="btn" href="https://finance.naver.com/item/main.naver?code=${code}" target="_blank" rel="noopener">공시·재무</a></div></section>
-    ${[pick, pick5].filter(Boolean).map(p => `<section class="pickbox mt"><div class="pb-h">${opTag(s.op)}<b>${HZL(p.H)} 추천종목 ${p.rank}위</b><span class="lbl">${HZP(p.H)} 보유 · ${dt(S.meta.asof)} 선정</span></div>
-      ${pickBody(p, p.H, recH(p.H)?.model?.grades, recH(p.H)?.model?.grades?.[p.grade] ? `과거 ${p1(recH(p.H).model.grades[p.grade][1])}%` : null)}</section>`).join("")}
+    ${PKS.length ? `<section class="pickbox mt"><div class="pb-h">${opTag(s.op)}<b>${PKS.map(p => `${HZL(p.H)} ${p.rank}위`).join(" · ")}</b><span class="lbl">추천종목 · ${dt(S.meta.asof)} 선정</span></div>
+      ${PKS.length > 1 ? `<div class="scroll"><table class="tbl"><thead><tr><th class="l">보유 기간</th><th>손절가(종가)</th><th>목표가</th></tr></thead><tbody>${PKS.map(p => `<tr><td class="l">${HZL(p.H)} · ${HZP(p.H)}</td><td class="num down">${n(p.stop)} <small>${pct(p.stpPct, 0)}</small></td><td class="num up">${n(p.target)} <small>${pct(p.tgtPct, 0)}</small></td></tr>`).join("")}</tbody></table></div>${pickBody({ ...PKS[0], stop: null }, true).replace(/^\s*<div class="rrb">[\s\S]*?<\/div><\/div>/, "")}` : pickBody(PKS[0])}</section>` : ""}
     <section class="card mt"><div class="card-h"><h2>핵심 요약 <small>${dt(S.meta.asof)} 종가 기준</small></h2></div><div class="card-b"><div class="ksum" id="ksum"><p class="note">불러오는 중</p></div></div></section>
     ${card("차트", `<div class="controls">${seg("tf", [["d", "일봉"], ["w", "주봉"], ["m", "월봉"]], st.tf || "d")}<span id="spw"></span><button class="btn sm" id="indbtn" type="button" aria-expanded="false">보조지표</button></div>`, `<div class="ovl" id="ovl"></div><div class="ind" id="ind" hidden></div><div class="clg" id="clg"></div><div id="panes"></div>`, "mt")}
     <section class="card mt"><div class="rets num" id="rets" style="border-top:0"></div><div class="kv num" style="border-top:1px solid var(--line)">${kv.map(([k, x]) => `<div><div class="k">${k}</div><div class="v">${x}</div></div>`).join("")}</div><div class="range" id="rng"></div></section>
@@ -2594,8 +2549,8 @@ async function vStock(code) {
       for (let x = new Date(O.at(-1)[0] + "T00:00:00Z"); ft.length <= 20;) { x.setUTCDate(x.getUTCDate() + 1); if (x.getUTCDay() % 6) ft.push(x.toISOString().slice(0, 10)); }
       const ac = OC.fc;
       mc.addLineSeries({ color: ac, lineWidth: 2, lineStyle: 2, priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: false })
-        .setData(ft.map((t, k) => ({ time: t, value: c0 * (1 + FC[2] * k / 20 / 100) })));
-      LG.push(`<span class="wrap"><i style="background:${ac}"></i> 1개월 예상 <b class="num">${n(c0 * (1 + FC[2] / 100))}</b>(${pct(FC[2], 1)}) · 10번 중 8번 범위 ${n(c0 * (1 + FC[0] / 100))}~${n(c0 * (1 + FC[4] / 100))}</span>`);
+        .setData(ft.map((t, k) => ({ time: t, value: c0 * (1 + (FC[5] ?? FC[2]) * k / 20 / 100) })));
+      LG.push(`<span class="wrap"><i style="background:${ac}"></i> 1개월 평균 예상 <b class="num">${n(c0 * (1 + (FC[5] ?? FC[2]) / 100))}</b>(${pct(FC[5] ?? FC[2], 1)}) · 10번 중 8번 범위 ${n(c0 * (1 + FC[0] / 100))}~${n(c0 * (1 + FC[4] / 100))}</span>`);
     }
     if (mk.length) cs.setMarkers(mk.sort((a, b) => a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
     if (pick) { cs.createPriceLine({ price: pick.target, color: up, lineWidth: 1, lineStyle: 2, title: "" }); cs.createPriceLine({ price: pick.stop, color: dn, lineWidth: 1, lineStyle: 2, title: "" });
@@ -2652,6 +2607,10 @@ async function vStock(code) {
       else {
         el.innerHTML = `<div class="card-b"><div class="controls" style="margin-bottom:10px">${seg("sc", [["1", "누적"], ["0", "일별"]], cum ? "1" : "0")}</div><div id="sfc"></div><div class="chart" id="sfch" style="height:210px;margin-top:10px"></div>${invLegend(cum ? INV : INV.slice(0, 3))}</div>`;
         flowCards(F, $("#sfc")); flowChart($("#sfch"), F, 999, cum);
+        const GR = [["외국인", "외국인"], ["기관합계", "기관 합계"], ["투신", "· 투신(펀드)"], ["사모", "· 사모펀드"], ["연기금", "· 연기금"], ["금융투자", "· 금융투자(증권사)"], ["보험", "· 보험"], ["은행", "· 은행"], ["기타법인", "기타법인"], ["개인", "개인"]].filter(([k]) => F[k]);
+        const sm = (k, m) => sum(F[k].slice(-m));
+        if (GR.length > 4) el.insertAdjacentHTML("beforeend", `<div class="scroll"><table class="tbl"><thead><tr><th class="l">투자자 (억 원)</th><th>1일</th><th>5일</th><th>20일</th></tr></thead><tbody>
+          ${GR.map(([k, l]) => `<tr><td class="l">${l}</td>${[1, 5, 20].map(m => `<td class="num ${cls(sm(k, m))}">${eok(sm(k, m))}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`);
         onSeg(el, "sc", x => { cum = x === "1"; drawTab(); });
       }
     }

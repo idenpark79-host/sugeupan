@@ -55,7 +55,7 @@ def _index(ret: pd.DataFrame, w: pd.DataFrame, cols) -> pd.Series:
     return (num / den.replace(0, np.nan)).fillna(0)
 
 
-def build(prices: dict, cap: dict, names: dict, krx: dict | None = None, log=print, min_amt=3e8):
+def build(prices: dict, cap: dict, names: dict, krx: dict | None = None, log=print, min_amt=3e8, flows: dict | None = None):
     codes = [c for c in prices if c in cap]
     W = _wide(prices, codes)
     O, Hh, L, C, V = W["O"], W["H"], W["L"], W["C"], W["V"]
@@ -113,6 +113,28 @@ def build(prices: dict, cap: dict, names: dict, krx: dict | None = None, log=pri
     F["rs60"] = F["r60"] - F["t_a60"]
     F["m_r20"] = pd.DataFrame(np.repeat(midx.pct_change(20).values[:, None], len(codes), axis=1), index=dates, columns=codes)
     F["m_br"] = pd.DataFrame(np.repeat(above20.mean(axis=1).values[:, None], len(codes), axis=1), index=dates, columns=codes)
+    # 유명 트레이더 기법 — 미너비니 추세 템플릿(8조건), 와인스타인 2단계, 터틀 55일 돌파, 오닐 신고가+거래량
+    ma50, ma150, ma200 = (C.rolling(n, min_periods=int(n * 0.8)).mean() for n in (50, 150, 200))
+    lo250 = L.rolling(250, min_periods=120).min()
+    rs12 = (C / C.shift(250) - 1).rank(axis=1, pct=True)
+    crit = [(C > ma150) & (C > ma200), ma150 > ma200, ma200 > ma200.shift(20), (ma50 > ma150) & (ma50 > ma200),
+            C > ma50, C >= lo250 * 1.3, C >= hi250 * 0.75, rs12 >= 0.7]
+    F["mm"] = sum(x.astype("float32") for x in crit).where(ma200.notna())
+    F["st2"] = ((C > ma150) & (ma150 > ma150.shift(10))).astype("float32").where(ma150.notna())
+    F["t55"] = C / Hh.shift(1).rolling(55, min_periods=40).max() - 1
+    v50 = V.rolling(50, min_periods=30).mean()
+    F["onl"] = ((C >= hi250 * 0.95) & (V.rolling(5, min_periods=3).mean() >= v50 * 1.5)).astype("float32").where(hi250.notna())
+    # 수급 — 투자자별 20일·5일 순매수 / 같은 기간 거래대금 (외국인·기관·연기금·투신·사모·금융투자)
+    if flows:
+        for g, k in (("외국인", "frg"), ("기관합계", "inst"), ("연기금", "pen"), ("투신", "trust"), ("사모", "pef"), ("금융투자", "fin")):
+            net = pd.DataFrame({c: flows[c][g] for c in codes if c in flows and g in flows[c]})
+            if net.empty:
+                continue
+            net = net.reindex(index=dates, columns=codes)
+            F[f"f_{k}20"] = net.rolling(20, min_periods=10).sum() / (amt60 * 20)
+            F[f"f_{k}5"] = net.rolling(5, min_periods=3).sum() / (amt60 * 5)
+        if "f_frg20" in F:
+            F["f_smart"] = sum((F[f"f_{k}20"] > 0).astype("float32") for k in ("frg", "pen", "trust") if f"f_{k}20" in F).where(F["f_frg20"].notna())
     RANK = ["r5", "r20", "r60", "r120", "mom", "hi52", "d20", "d60", "vol20", "amtr", "liq", "rsi", "rs20", "rs60"]
     for k in RANK:
         F["k_" + k] = F[k].rank(axis=1, pct=True)
@@ -192,6 +214,8 @@ def build(prices: dict, cap: dict, names: dict, krx: dict | None = None, log=pri
            "up": round(float((zz > q1[kk, 2])[late].mean()) * 100, 1), "n": int(late.sum()),
            "from": str(pd.Timestamp(dates[cutd]).date()), "to": str(pd.Timestamp(dates[int(ud[-1])]).date())}
     QT = qt(np.ones(len(zz), bool))
+    z1, z99 = np.quantile(zz, [.01, .99])
+    QM = np.array([float(np.mean(np.clip(zz[kk == k], z1, z99))) if (kk == k).any() else 0.0 for k in range(10)])   # 분위별 평균(극단값 1% 제한)
     log(f"    1개월 예상 범위 검증: 80% 범위 적중 {fcv['c80']}% · 50% 범위 적중 {fcv['c50']}% ({fcv['n']:,}건)")
     log("    투자의견 검증(다음 1개월 시장 대비): " + " · ".join(f"{LV[int(k)]} {v[0]:+.2f}%p" for k, v in val.items()))
 
@@ -296,14 +320,22 @@ def build(prices: dict, cap: dict, names: dict, krx: dict | None = None, log=pri
                      "val": val[str(lv)][:2]}
         v_ = vol60[code].iloc[t_last]
         if np.isfinite(v_):
-            out[code]["fc"] = [round(float(x * v_) * 100, 2) for x in QT[min(int(p_ * 10), 9)]]
+            kq = min(int(p_ * 10), 9)
+            out[code]["fc"] = [round(float(x * v_) * 100, 2) for x in QT[kq]] + [round(float(QM[kq] * v_) * 100, 2)]
     meta = {"asof": str(pd.Timestamp(dates[-1]).date()), "n": len(out), "oos": [str(pd.Timestamp(dates[starts[0]]).date()), str(pd.Timestamp(dates[-1]).date())],
             "val": val, "fc": fcv, "monthly": monthly[-36:], "consist": round(consist * 100, 1) if consist is not None else None,
             "dec": [round(float(v) * 100, 2) for v in dec.values], "tval": tval, "cut": CUT,
             "market": [[str(pd.Timestamp(d_).date()), round(float(v / mser.iloc[0]), 4)] for d_, v in mser.items()],
             "mret": {"r1d": float(midx.pct_change().iloc[-1]), "r1w": float(midx.pct_change(5).iloc[-1]),
                      "r1m": float(midx.pct_change(20).iloc[-1]), "r3m": float(midx.pct_change(60).iloc[-1])}}
-    return {"ops": out, "themes": tnow, "theme_of": th, "meta": meta}
+    pk = None
+    try:
+        import picks as PK
+        pk = PK.build(dict(locals()), log=log)
+    except Exception:
+        import traceback
+        traceback.print_exc()
+    return {"ops": out, "themes": tnow, "theme_of": th, "meta": meta, "picks": pk}
 
 
 def _pp(x, d=1):
