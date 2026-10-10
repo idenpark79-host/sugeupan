@@ -453,12 +453,33 @@ MET_FIELDS = ["r1w", "r1m", "r3m", "r6m", "r1y", "rsi", "hi52", "lo52", "volr", 
               "frg1", "frg5", "frg20", "frgS", "inst1", "inst5", "inst20", "instS", "pen1", "pen5", "pen20", "penS"]
 
 
+SHARE = {"title": "Wake · 수급이 말하고, 차트가 증명한다",
+         "desc": "외국인·기관 수급과 기술적 분석으로 고른 추천종목. 10년 데이터로 검증.",
+         "url": "https://idenpark79-host.github.io/sugeupan/"}
+
+
+def _share_meta():
+    """카카오톡·문자·SNS 링크 미리보기(제목·설명·그림)와 홈 화면 아이콘."""
+    c = {**SHARE, **CFG.get("share", {})}
+    u = c["url"].rstrip("/") + "/"
+    e = lambda x: x.replace("&", "&amp;").replace('"', "&quot;")
+    return (f'<title>{e(c["title"])}</title><meta name="description" content="{e(c["desc"])}">'
+            f'<meta property="og:type" content="website"><meta property="og:site_name" content="Wake">'
+            f'<meta property="og:title" content="{e(c["title"])}"><meta property="og:description" content="{e(c["desc"])}">'
+            f'<meta property="og:url" content="{u}"><meta property="og:image" content="{u}og.png">'
+            f'<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">'
+            f'<meta property="og:locale" content="ko_KR"><meta name="twitter:card" content="summary_large_image">'
+            f'<link rel="icon" type="image/png" href="favicon.png"><link rel="apple-touch-icon" href="apple-touch-icon.png">'
+            f'<meta name="apple-mobile-web-app-title" content="Wake">')
+
+
 def write_index():
     """app.html(본문)을 완전한 HTML 문서로 감싸 GitHub Pages용 index.html 생성."""
     body = (ROOT / "site" / "app.html").read_text(encoding="utf-8")
     (ROOT / "site" / "index.html").write_text(
         '<!doctype html><html lang="ko"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
+        + _share_meta() +
         '<meta name="theme-color" content="#F5F6F8"><style>:root{padding-top:env(safe-area-inset-top,0px)}'
         'body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>'
         '</head><body>' + body + '</body></html>', encoding="utf-8")
