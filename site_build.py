@@ -47,7 +47,7 @@ import universe
 OUT = ROOT / "site" / "data"
 KST = timezone(timedelta(hours=9))
 CFG = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
-SITE = {"chart_min_marcap": 1e11, "flow_min_marcap": 3e11, **CFG.get("site", {})}
+SITE = {"chart_min_marcap": 0, "flow_min_marcap": 3e11, **CFG.get("site", {})}
 INV4 = ["개인", "외국인", "기관합계", "연기금"]
 DEMO_REAL = {"005930": "삼성전자", "000660": "SK하이닉스", "005380": "현대차", "000270": "기아",
              "035420": "NAVER", "051910": "LG화학", "006400": "삼성SDI", "068270": "셀트리온",
@@ -216,9 +216,9 @@ class Source:
 
     def hist(self, code):
         if self.demo:
-            return rawdata.demo_series(code, 2520).iloc[-330:]
+            return rawdata.demo_series(code, 2520)
         import FinanceDataReader as fdr
-        start = (pd.Timestamp(self.day) - pd.Timedelta(days=500)).strftime("%Y-%m-%d")
+        start = (pd.Timestamp(self.day) - pd.Timedelta(days=3700)).strftime("%Y-%m-%d")
         return rawdata._normalize(fdr.DataReader(code, start))
 
     def rank(self, market: str, investor: str, start: str) -> pd.DataFrame:
@@ -337,14 +337,28 @@ def _tf_bars(h: pd.DataFrame, long: pd.DataFrame | None):
     return out
 
 
+def _dump_hist(code: str, d: pd.DataFrame):
+    """일봉 전체(최대 10년)를 열 단위 정수 배열로 — 차트에서 '전체'·주봉·월봉을 볼 때만 불러온다."""
+    d = d[["Open", "High", "Low", "Close", "Volume"]].dropna()
+    small = float(d.Close.median()) < 1000
+    q = (lambda x: [round(float(v), 2) for v in x]) if small else (lambda x: [int(round(float(v))) for v in x])
+    o = d.Open.where(d.Open > 0, d.Close)
+    obj = {"t": [int(t.strftime("%Y%m%d")) for t in d.index], "o": q(o), "h": q(d.High.where(d.High > 0, d.Close)),
+           "l": q(d.Low.where(d.Low > 0, d.Close)), "c": q(d.Close), "v": [int(v) for v in d.Volume]}
+    p = OUT / "h" / f"{code}.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(obj, separators=(",", ":")), encoding="utf-8")
+
+
 def build_details(src: Source, lst: pd.DataFrame, detail: list, flowset: set, scan_prices: dict, scan_flows: dict,
                   pstats: dict | None = None, ai_today: dict | None = None, rt: dict | None = None,
                   long_prices: dict | None = None, short_ctx: tuple | None = None):
     log("종목 상세", len(detail), "/ 수급", len(flowset))
 
-    def get_hist(code):
-        if code in scan_prices:
-            return scan_prices[code].iloc[-330:]
+    def get_hist(code):                          # 가능한 한 긴 시세(최대 10년) — 차트 '전체' 기간과 주봉·월봉에 사용
+        for P in (long_prices or {}, scan_prices):
+            if code in P:
+                return P[code]
         return src.hist(code)
 
     hists = pmap(get_hist, detail, 8, "시세")
@@ -363,7 +377,8 @@ def build_details(src: Source, lst: pd.DataFrame, detail: list, flowset: set, sc
     metrics, views = {}, {}
     ai_today = ai_today or {}
     for code, h in hists.items():
-        h = h[h.Close > 0].iloc[-330:]
+        full = h[h.Close > 0]
+        h = full.iloc[-330:]
         if len(h) < 30:
             continue
         d = indicators.add_indicators(h)
@@ -391,12 +406,13 @@ def build_details(src: Source, lst: pd.DataFrame, detail: list, flowset: set, sc
         except Exception:
             pass
         try:
-            obj["wk"], obj["mo"] = _tf_bars(h, (long_prices or {}).get(code))
+            _dump_hist(code, full)
+            obj["hist"] = int(len(full))
         except Exception as e:
-            log("주봉·월봉 실패", code, e)
+            log("장기 시세 실패", code, e)
         if short_ctx and code in short_ctx[0]:
             try:
-                sa = shorts.analyze(short_ctx[0][code], (long_prices or {}).get(code, h), short_ctx[1].get(code), short_ctx[2])
+                sa = shorts.analyze(short_ctx[0][code], full, short_ctx[1].get(code), short_ctx[2])
                 if sa:
                     obj["short"] = sa
             except Exception as e:
@@ -702,7 +718,7 @@ def main():
     build_patterns(pstats)
     dump("bt.json", {"ok": False})
     build_rec(rt, lst, src, {**ext_prices, **scan_prices}, args.demo)
-    ai_today = {}
+    ai_today = {c: {"20": [o["score"]]} for c, o in ((rt or {}).get("ops") or {}).items()}   # 퀀트 스코어 = 투자의견 점수
 
     detail = lst[lst.Marcap >= SITE["chart_min_marcap"]].sort_values("Marcap", ascending=False).Code.tolist()
     if args.max_detail:

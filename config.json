@@ -99,7 +99,7 @@
   "model": "claude-sonnet-5-5"
  },
  "site": {
-  "chart_min_marcap": 100000000000.0,
+  "chart_min_marcap": 0,
   "flow_min_marcap": 300000000000.0,
   "rec_count": 20
  }

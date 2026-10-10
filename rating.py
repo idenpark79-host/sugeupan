@@ -200,7 +200,7 @@ def build(prices: dict, cap: dict, names: dict, krx: dict | None = None, log=pri
     dec = V2.groupby(pd.cut(V2.pct, np.linspace(0, 1, 11), include_lowest=True), observed=True).y.mean()
     # ── 1개월 예상 범위: 점수 10분위별 실제 1개월 수익률 분포(60일 변동성 단위) — 앞 2/3로 만든 범위를 뒤 1/3에서 검증 ──
     vol60 = ret.rolling(60, min_periods=40).std().clip(0.005, 0.08)
-    V2["z"] = V2.raw / vol60.values[V2.d.values, V2.c.values]
+    V2["z"] = V2.y / vol60.values[V2.d.values, V2.c.values]          # 시장(같은 날 전 종목 평균) 대비 수익 — 오를 종목·내릴 종목이 갈리도록
     V3 = V2[np.isfinite(V2.z)]
     QS = [.1, .25, .5, .75, .9]
     kk, zz, dd = np.minimum((V3.pct.values * 10).astype(int), 9), V3.z.values, V3.d.values
@@ -216,7 +216,7 @@ def build(prices: dict, cap: dict, names: dict, krx: dict | None = None, log=pri
     QT = qt(np.ones(len(zz), bool))
     z1, z99 = np.quantile(zz, [.01, .99])
     QM = np.array([float(np.mean(np.clip(zz[kk == k], z1, z99))) if (kk == k).any() else 0.0 for k in range(10)])   # 분위별 평균(극단값 1% 제한)
-    log(f"    1개월 예상 범위 검증: 80% 범위 적중 {fcv['c80']}% · 50% 범위 적중 {fcv['c50']}% ({fcv['n']:,}건)")
+    log(f"    1개월 예상 범위(시장 대비) 검증: 80% 범위 적중 {fcv['c80']}% · 50% 범위 적중 {fcv['c50']}% ({fcv['n']:,}건)")
     log("    투자의견 검증(다음 1개월 시장 대비): " + " · ".join(f"{LV[int(k)]} {v[0]:+.2f}%p" for k, v in val.items()))
 
     # 주도섹터 검증: 매주 순위 상위 3 / 하위 3 섹터의 다음 1개월 시장 대비
