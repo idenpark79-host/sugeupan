@@ -1134,10 +1134,24 @@ const RT = { timer: null, cfg: () => store.get("rt", null) };
 function rtOpen() { const d = new Date(Date.now() + 9 * 3600e3), m = d.getUTCHours() * 60 + d.getUTCMinutes(), w = d.getUTCDay(); return w >= 1 && w <= 5 && m >= 530 && m <= 940; }
 async function rtFetch(codes) {
   const c = RT.cfg(); if (!c?.url || !codes.length) return {};
-  const r = await fetch(`${c.url.replace(/\/$/, "")}?codes=${codes.join(",")}`, { headers: { "x-wake-key": c.key || "" } });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error || `오류 ${r.status}`);
-  return j.q || {};
+  const out = {}, U = [...new Set(codes)];
+  for (let i = 0; i < U.length; i += 15) {                      // 중계 서버는 한 번에 15종목까지
+    const r = await fetch(`${c.url.replace(/\/$/, "")}?codes=${U.slice(i, i + 15).join(",")}`, { headers: { "x-wake-key": c.key || "" } });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || `오류 ${r.status}`);
+    Object.assign(out, j.q || {});
+  }
+  return out;
+}
+/* [data-rt=종목코드] 안의 .rp(현재가)·.rc(등락률)를 장중 10초마다 갱신 */
+function rtBind(root) {
+  const els = $$("[data-rt]", root), codes = [...new Set(els.map(e => e.dataset.rt))];
+  if (!codes.length) return;
+  rtWatch(codes, q => els.forEach(e => { const x = q[e.dataset.rt]; if (!x || !e.isConnected) return;
+    const p = $(".rp", e), c = $(".rc", e);
+    if (p) p.textContent = n(x.p);
+    if (c) { c.textContent = pct(x.pct); c.className = "rc " + cls(x.pct); }
+    if (S.by[e.dataset.rt]) { S.by[e.dataset.rt].price = x.p; S.by[e.dataset.rt].pct = x.pct; } }));
 }
 function rtWatch(codes, apply) {
   clearInterval(RT.timer);
@@ -1595,7 +1609,7 @@ function pickCard(p) {
   const s = S.by[p.code] || {};
   return `<article class="pk" data-pc="${p.code}" data-ph="${p.H}">
     <div class="pk-h"><div class="pk-n"><span class="rk num">${p.rank}</span><a href="#stock-${p.code}"><b>${esc(p.name)}</b></a>${p.op?.lv != null ? opTag(p.op.lv) : ""}<small>${esc(p.theme || "")}</small></div>
-      <div class="pk-px num"><b>${n(s.price ?? p.close)}</b><small class="${cls(s.pct)}">${pct(s.pct)}</small></div></div>
+      <div class="pk-px num" data-rt="${p.code}"><b class="rp">${n(s.price ?? p.close)}</b><small class="rc ${cls(s.pct)}">${pct(s.pct)}</small></div></div>
     ${pickBody(p, false)}</article>`;
 }
 VIEWS.ai = function () {
@@ -1621,7 +1635,7 @@ VIEWS.ai = function () {
 </div>`;
     if (false) $("#aival").insertAdjacentHTML("beforeend", `<p class="warnbox">${HZL(H)} ${SZ[Z]} 추천은 과거 검증에서 같은 규모 일반 종목 평균과 차이가 크지 않았습니다. 참고용으로 보세요.</p>`);
     $("#apicks").innerHTML = P.map(p => pickCard(p)).join("") || `<div class="card empty">오늘은 조건을 만족하는 종목이 없습니다.</div>`;
-    bindEv($("#apicks"), P);
+    bindEv($("#apicks"), P); rtBind($("#apicks"));
   };
   onSeg(v, "aih", x => { st.aiH = x === "w" ? "w" : +x; draw(); });
   onSeg(v, "aiz", x => { st.aiZ = x; draw(); });
@@ -1641,7 +1655,7 @@ function drawWarn(W) {
   $("#apicks").innerHTML = L.map(p => { const s = S.by[p.code] || {};
     return `<article class="pk wn" data-pc="${p.code}" data-ph="w">
       <div class="pk-h"><div class="pk-n"><span class="rk num">${p.rank}</span><a href="#stock-${p.code}"><b>${esc(p.name)}</b></a><small>${esc(p.theme || "")} · 퀀트 스코어 ${n(p.score, 0)}</small></div>
-        <div class="pk-px num"><b>${n(s.price ?? p.close)}</b><small class="${cls(s.pct)}">${pct(s.pct)}</small></div></div>
+        <div class="pk-px num" data-rt="${p.code}"><b class="rp">${n(s.price ?? p.close)}</b><small class="rc ${cls(s.pct)}">${pct(s.pct)}</small></div></div>
       <div class="pk-story"><div class="pk-q">왜 떨어질 거라고 보나요?</div>${(p.story || []).map(x => `<p>${esc(x)}</p>`).join("")}</div>
       <div class="pk-ev" data-stop>${(p.ev || []).map((e, i) => `<button type="button" data-ev="${i}" aria-expanded="false"><small>${e.k}</small><b>${esc(e.v)}</b></button>`).join("")}</div>
       <div class="pk-evd" data-stop hidden></div></article>`; }).join("");
@@ -2595,7 +2609,7 @@ VIEWS.watch = function () {
   const W = wl.map(c => S.by[c]);
   const rows = W.map(s => { const p = S.pick[s.code], a = al[s.code];
     return `<tr data-go="${s.code}"><td class="l">${nameCell(s, `${mkName(s.mkt)} · ${esc(s.sector)}`)}</td><td class="hide-m" style="width:150px;padding-top:4px;padding-bottom:4px" data-sp="${s.code}"></td>
-      <td class="num"><b>${n(s.price)}</b></td><td class="num ${cls(s.pct)}"><b>${pct(s.pct)}</b></td><td class="num ${cls(s.r1w)}">${pct(s.r1w, 1)}</td><td class="num ${cls(s.r1m)}">${pct(s.r1m, 1)}</td>
+      <td class="num" data-rt="${s.code}"><b class="rp">${n(s.price)}</b></td><td class="num" data-rt="${s.code}"><b class="rc ${cls(s.pct)}">${pct(s.pct)}</b></td><td class="num ${cls(s.r1w)}">${pct(s.r1w, 1)}</td><td class="num ${cls(s.r1m)}">${pct(s.r1m, 1)}</td>
       <td class="num hide-m ${cls(s.frg5)}">${eok(s.frg5)}</td>
       <td class="l hide-m">${hits.has(s.code) ? `<span class="tag" style="margin:0 4px 0 0">알림 도달</span>` : a ? `<span class="lbl">알림 ${a.above ? n(a.above) + " 이상" : ""}${a.above && a.below ? " · " : ""}${a.below ? n(a.below) + " 이하" : ""}</span> ` : ""}${p ? `<span class="tag" style="margin:0">스윙 추천 ${p.rank}위</span>` : ""}</td>
       <td><button class="btn sm" data-stop data-del="${s.code}" type="button">삭제</button></td></tr>`; }).join("");
@@ -2621,6 +2635,7 @@ VIEWS.watch = function () {
           <div><span>스윙 추천 포함</span><b>${W.filter(s => S.pick[s.code]).length}종목</b></div><div><span>알림 도달</span><b>${hits.size}건</b></div></div>` : `<div class="empty">-</div>`)}
     </div>`);
   bindGo(v);
+  rtBind(v);
   $$("[data-del]", v).forEach(b => b.onclick = e => { e.stopPropagation(); store.set("watch", watchList().filter(x => x !== b.dataset.del)); drawNav(); VIEWS.watch(); });
   $$("[data-adel]", v).forEach(b => b.onclick = () => { const a = store.get("alerts", {}); delete a[b.dataset.adel]; store.set("alerts", a); drawNav(); VIEWS.watch(); });
   if ($("#wcmp")) $("#wcmp").onclick = () => { store.set("cmp", wl.slice(0, 4)); drawNav(); location.hash = "cmp"; };
