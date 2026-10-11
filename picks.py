@@ -132,6 +132,109 @@ def _sim_half(A, d, cc, Hh, risk, t1):
     return out - COST
 
 
+LV_MA, LV_DMIN, LV_DMAX, LV_T2, LV_FAR = False, 0.5, 1.3, 1.5, 1.6   # 검증: 이평선보다 실제 저점이 손절 근거로 나았고, 너무 가까운 저항을 2차 목표로 쓰면 수익이 줄었다
+LOOK = {5: 60, 20: 120, 60: 250}      # 지지·저항을 찾는 기간(봉)
+PIVK = {5: 3, 20: 5, 60: 8}           # 고점·저점: 앞뒤 k봉 중 가장 높은(낮은) 봉
+
+
+def _levels(A, d, c, Hh, s, dates=None):
+    """손절가·1차·2차 목표가를 차트의 지지·저항에서 정한다.
+    손절: 아래쪽 가장 가까운 지지(최근 저점·20/60/120일선) 1% 아래 — 단, 기간에 맞는 흔들림 폭 안에 있을 때만
+    1차 목표: 위쪽 가장 가까운 저항(최근 고점·52주 최고가) 바로 아래 / 2차 목표: 그다음 저항, 없으면 손절폭의 2배"""
+    from numpy.lib.stride_tricks import sliding_window_view as swv
+    O, Hi, Lo, C = A
+    a = max(0, d - LOOK[Hh] + 1)
+    h, l, cl = Hi[a:d + 1, c], Lo[a:d + 1, c], C[a:d + 1, c]
+    px = C[d, c]
+    if not np.isfinite(px) or len(h) < 30:
+        return None
+    k = PIVK[Hh]
+    sv = (s if np.isfinite(s) else 0.02) * np.sqrt(Hh)
+    lo_c, hi_c = RISK[Hh]
+    fmt = lambda i: pd.Timestamp(dates[a + i]).strftime("%m.%d") if dates is not None else ""
+    sup, res = [], []
+    if len(h) > 2 * k + 1:
+        wh, wl = swv(h, 2 * k + 1), swv(l, 2 * k + 1)
+        with np.errstate(invalid="ignore"):
+            ph = np.flatnonzero(h[k:-k] >= np.nanmax(wh, 1)) + k
+            pl = np.flatnonzero(l[k:-k] <= np.nanmin(wl, 1)) + k
+        res += [(float(h[i]), f"{fmt(i)} 고점") for i in ph if h[i] > px * 1.005]
+        sup += [(float(l[i]), f"{fmt(i)} 저점") for i in pl if l[i] < px * 0.995]
+    if LV_MA:
+        for n in (20, 60, 120):
+            if d + 1 >= n:
+                m = float(np.nanmean(C[d - n + 1:d + 1, c]))
+                if np.isfinite(m) and m < px * 0.995:
+                    sup.append((m, f"{n}일 이동평균선"))
+    lowall = float(np.nanmin(l))
+    if lowall < px * 0.995:
+        sup.append((lowall, f"최근 {LOOK[Hh] // 20}개월 최저가"))
+    h52 = float(np.nanmax(Hi[max(0, d - 249):d + 1, c]))
+    if h52 > px * 1.005:
+        res.append((h52, "52주 최고가"))
+    # 손절
+    dmin, dmax = max(lo_c * 0.6, LV_DMIN * sv), hi_c * LV_DMAX
+    dist = lambda lv: 1 - lv * 0.99 / px
+    if LV_MA is False:          # 이동평균선은 실제 저점 지지가 없을 때만
+        mas = []
+        for n in ((5, 10, 20, 60) if Hh == 5 else (10, 20, 60, 120)):
+            if d + 1 >= n:
+                m = float(np.nanmean(C[d - n + 1:d + 1, c]))
+                if np.isfinite(m) and m < px * 0.995:
+                    mas.append((m, f"{n}일 이동평균선"))
+    else:
+        mas = []
+    tiers = [[x for x in sup if dmin <= dist(x[0]) <= dmax], [x for x in mas if dmin <= dist(x[0]) <= dmax],
+             [x for x in sup + mas if dmax < dist(x[0]) <= hi_c * LV_FAR],
+             [x for x in sup + mas if lo_c * 0.5 <= dist(x[0]) < dmin]]
+    lo10 = float(np.nanmin(Lo[max(0, d - 9):d + 1, c]))
+    if lo10 < px * 0.985:
+        tiers.append([(lo10, "최근 2주 최저가")])
+    pick_ = next((sorted(t, key=lambda x: -x[0])[0] for t in tiers if t), None)
+    if pick_:
+        stop, sw = pick_[0] * 0.99, ("sup", pick_[1], pick_[0])
+    else:
+        r = float(min(max(1.5 * sv, lo_c * 0.6), hi_c * LV_DMAX))
+        stop, sw = px * (1 - r), ("vol", None, None)
+    risk = 1 - stop / px
+    # 목표
+    rs = sorted(set((round(lv, 2), w) for lv, w in res if lv / px - 1 >= max(0.25 * sv, 0.02)))
+    if rs:
+        t1, t1w = rs[0][0] * 0.995, ("res", rs[0][1], rs[0][0])
+        rest = [x for x in rs[1:] if x[0] * 0.995 >= t1 * 1.03]
+    else:
+        t1, t1w, rest = px * (1 + max(risk, 0.5 * sv)), ("free", None, None), []
+    rest = [x for x in rest if x[0] * 0.995 / px - 1 >= LV_T2 * risk]
+    if rest:
+        t2, t2w = rest[0][0] * 0.995, ("res", rest[0][1], rest[0][0])
+    else:
+        t2, t2w = max(px * (1 + 2 * risk), t1 * 1.05), ("rr", None, None)
+    if t2 < t1 * 1.03:
+        t2, t2w = t1 * 1.05, ("rr", None, None)
+    return {"stop": stop, "t1": t1, "t2": t2, "sw": sw, "t1w": t1w, "t2w": t2w, "risk": risk}
+
+
+def _sim_lv(A, d, cc, Hh, stop, tgt):
+    """절대 가격 손절·목표로 모의 매매 (규칙은 _sim과 같음)."""
+    O, Hi, Lo, C = A
+    entry = O[d + 1, cc]
+    idx = d[:, None] + np.arange(1, Hh + 1)[None, :]
+    o, h, cl = O[idx, cc[:, None]], Hi[idx, cc[:, None]], C[idx, cc[:, None]]
+    with np.errstate(invalid="ignore"):
+        hs, ht = cl <= stop[:, None], h >= tgt[:, None]
+    big = Hh + 1
+    fs = np.where(hs.any(1), hs.argmax(1), big)
+    ft = np.where(ht.any(1), ht.argmax(1), big)
+    r = np.arange(len(d))
+    stopped = (fs < big) & (fs < ft)
+    hit = (ft < big) & (ft <= fs)
+    px_s = np.where(fs + 1 <= Hh - 1, o[r, np.minimum(fs + 1, Hh - 1)], cl[r, np.minimum(fs, Hh - 1)])
+    px_t = np.fmax(o[r, np.minimum(ft, Hh - 1)], tgt)
+    last = C[d + Hh, cc]
+    ret = np.where(stopped, px_s, np.where(hit, px_t, last)) / entry - 1 - COST
+    return ret, stopped, hit, last / entry - 1 - COST
+
+
 def _risk(sig, Hh):
     lo, hi = RISK[Hh]
     return np.clip(K_STOP * sig * np.sqrt(Hh), lo, hi)
@@ -192,17 +295,23 @@ def build(c: dict, log=print) -> dict:
             tq = thc[Q.c.values]
             Q = Q[(Q.assign(th_=tq).groupby(["d", "th_"]).cumcount().values < PER_THEME) | (tq == "기타")].groupby("d").head(TOPN)
             d, cc = Q.d.values.astype(int), Q.c.values.astype(int)
-            rk_ = _risk(sig[d, cc], Hh)
-            ret, st_, hit, hold = _sim(A, d, cc, Hh, rk_)
-            s0v = np.nan_to_num(sig[d, cc], nan=0.02) * np.sqrt(Hh)
-            ret2 = _sim_half(A, d, cc, Hh, rk_, np.minimum(K_T1 * s0v, RR * rk_ * 0.6))
+            LV = [_levels(A, int(d_), int(c_), Hh, sig[d_, c_]) for d_, c_ in zip(d, cc)]
+            okl = np.array([x is not None for x in LV])
+            d, cc, LV = d[okl], cc[okl], [x for x in LV if x is not None]
+            stp_ = np.array([x["stop"] for x in LV]); t1_ = np.array([x["t1"] for x in LV]); t2_ = np.array([x["t2"] for x in LV])
+            ret, st_, hit, hold = _sim_lv(A, d, cc, Hh, stp_, t2_)
+            hmax = np.nanmax(A[1][d[:, None] + np.arange(1, Hh + 1)[None, :], cc[:, None]], axis=1)
+            rch = (hmax >= t1_).astype(float)
+            rk_ = 1 - stp_ / A[3][d, cc]
+            ret2 = _sim_half(A, d, cc, Hh, rk_, t1_ / A[0][d + 1, cc] - 1)
             mk = midx[d + Hh] / midx[d] - 1
             segm = big[:-Hh - 1] if sg == "L" else ~big[:-Hh - 1]
             ew_day = np.nanmean(np.where(elig & segm, fw, np.nan), axis=1)
             t1b_day = np.nanmean(np.where(elig & segm & np.isfinite(sig[:-Hh - 1]), reach[:-Hh - 1], np.nan), axis=1)
-            m = np.isfinite(ret) & np.isfinite(mk) & np.isfinite(reach[d, cc])
+            m = np.isfinite(ret) & np.isfinite(mk)
             V = pd.DataFrame({"d": d[m], "r": ret[m], "s": st_[m], "t": hit[m], "h": hold[m], "mk": mk[m], "ew": ew_day[d][m],
-                              "t1": reach[d, cc][m], "t1b": t1b_day[d][m], "r2": ret2[m]})
+                              "t1": rch[m], "t1b": t1b_day[d][m], "r2": ret2[m],
+                              "rp": rk_[m], "t1p": (t1_ / A[3][d, cc] - 1)[m], "t2p": (t2_ / A[3][d, cc] - 1)[m]})
             allV.append(V)
             val = _val(V, dates) if len(V) else {}
             val["name"], val["desc"] = sname, sdesc
@@ -225,15 +334,18 @@ def build(c: dict, log=print) -> dict:
                 code = codes[ci_]
                 close = float(A[3][t_last, ci_])
                 s0 = float(sig[t_last, ci_]) if np.isfinite(sig[t_last, ci_]) else 0.02
-                r_ = float(_risk(s0, Hh))
+                lv = _levels(A, t_last, ci_, Hh, s0, dates)
+                if lv is None:
+                    continue
                 info = _story(c, code, ci_, Hh, val)
-                t1p = min(K_T1 * s0 * np.sqrt(Hh), RR * r_ * 0.6)
+                st_p, t1_p, t2_p = tick(lv["stop"]), tick(lv["t1"]), tick(lv["t2"])
+                lv.update(stop=st_p, t1=t1_p, t2=t2_p, risk=1 - st_p / close)
                 res["picks"].append({"code": code, "name": c["names"].get(code, code), "close": close, "size": sg, "rank": rank,
-                                     "t1": tick(close * (1 + t1p)), "t1Pct": round(t1p * 100, 1),
-                                     "target": tick(close * (1 + RR * r_)), "stop": tick(close * (1 - r_)),
-                                     "tgtPct": round(RR * r_ * 100, 1), "stpPct": round(-r_ * 100, 1),
+                                     "t1": t1_p, "t1Pct": round((t1_p / close - 1) * 100, 1),
+                                     "target": t2_p, "stop": st_p,
+                                     "tgtPct": round((t2_p / close - 1) * 100, 1), "stpPct": round((st_p / close - 1) * 100, 1),
                                      "score": round(p * 100, 1), "theme": th.get(code, "기타"),
-                                     "plan": _plan(Hh, s0, r_, val, t1p), "prob": val.get("win", 50) / 100, "exp": val.get("avg", 0) / 100, **info})
+                                     "plan": _plan2(Hh, s0, close, lv, val), "prob": val.get("win", 50) / 100, "exp": val.get("avg", 0) / 100, **info})
         res["val"] = _val(pd.concat(allV), dates)
         out[str(Hh)] = res
     try:
@@ -331,6 +443,28 @@ def _wstory(c, code):
     ev = [{"k": "추세 템플릿", "v": f"{mm}/8 충족" if mm is not None else "-", "ok": (mm or 0) >= 6, "rows": tr or []},
           {"k": "기술적 신호", "v": f"{sum(r[1] for r in tk)}/{len(tk)} 긍정" if tk else "-", "ok": bool(tk) and sum(r[1] for r in tk) >= len(tk) * 0.6, "rows": tk}]
     return {"story": s[:5], "ev": ev}
+
+
+def _plan2(Hh, s0, px, lv, val):
+    """지지·저항 근거 설명."""
+    w = lambda x: f"{x:,.0f}원"
+    sw, t1w, t2w = lv["sw"], lv["t1w"], lv["t2w"]
+    if sw[0] == "sup":
+        stop = (f"{sw[1]}({w(sw[2])})이 아래쪽 지지선이에요. 최근에 사는 힘이 들어와 주가가 버틴 자리라, 종가가 이보다 1% 더 아래({w(lv['stop'])})로 마감하면 "
+                f"지지가 깨졌다고 보고 다음 날 정리해요. 산 가격 대비 {-lv['risk'] * 100:.1f}%예요.")
+    else:
+        stop = (f"가까운 아래쪽에 {HZ[Hh][1]} 보유에 맞는 지지선이 없어서, 이 종목이 {HZ[Hh][1]} 동안 보통 흔들리는 폭(하루 평균 {s0 * 100:.1f}% 움직임 기준)을 넘는 "
+                f"{w(lv['stop'])}에 손절가를 뒀어요.")
+    if t1w[0] == "res":
+        t1 = f"{t1w[1]}({w(t1w[2])})이 위쪽 첫 저항이에요. 과거에 여기서 팔려는 물량이 나와 막혔던 가격이라 바로 아래 {w(lv['t1'])}을 1차 목표로 잡았어요. 닿으면 일부를 팔아 수익을 확정하세요."
+    else:
+        t1 = f"최근 고점 위로 올라선 상태라 위쪽에 막힐 가격(저항)이 없어요. 그래서 손절폭과 같은 만큼 오른 {w(lv['t1'])}을 1차 목표로 잡았어요."
+    if t2w[0] == "res":
+        t2 = f"그 위 다음 저항은 {t2w[1]}({w(t2w[2])})이에요. 1차 저항을 넘으면 이 가격까지 열려 있어요."
+    else:
+        t2 = f"1차 목표 위로 손절폭의 1.5배 이상 떨어진 뚜렷한 저항이 없어서, 손절할 때 잃는 폭의 2배({w(lv['t2'])})를 2차 목표로 잡았어요."
+    t2 += f" 과거 같은 방법으로 고른 종목은 {val.get('t1', 0):.0f}%가 {HZ[Hh][1]} 안에 1차 목표에 닿았고, {val.get('hitT', 0):.0f}%가 2차 목표까지 갔어요."
+    return {"stop": stop, "t1": t1, "target": t2}
 
 
 def _plan(Hh, s0, r_, val, t1p=None):

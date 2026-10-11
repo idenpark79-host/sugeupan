@@ -653,6 +653,10 @@ table.tbl thead th[aria-sort]{color:var(--accent)}
 .tbl.inv tr.sub td{white-space:normal;text-align:left;color:var(--muted);font-size:12px;line-height:1.55;padding-top:0}
 .fcl{position:absolute;inset:0;pointer-events:none;z-index:1;overflow:hidden}
 .fcsel{display:flex;align-items:center;gap:8px;margin:8px 0 2px}.fcsel:empty{display:none}
+.rrb .lab{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.rrb .lab span{display:flex;flex-direction:column;gap:1px;white-space:normal;min-width:0}
+.rrb .lab span.c{text-align:center;align-items:center}.rrb .lab span.r{text-align:right;align-items:flex-end}
+.rrb .lab small{font-size:11px;color:var(--muted)}
 </style>
 
 <div class="app">
@@ -1547,7 +1551,7 @@ function rrBar(p) {
   const x = clamp((p.close - p.stop) / ((p.target - p.stop) || 1) * 100, 0, 100);
   const x1 = p.t1 ? clamp((p.t1 - p.stop) / ((p.target - p.stop) || 1) * 100, 0, 100) : null;
   return `<div class="rrb"><div class="bar"><span class="dn" style="width:${x}%"></span><span class="upz" style="left:${x}%;width:${100 - x}%"></span><i style="left:${x}%"></i>${x1 != null ? `<i class="t1" style="left:${x1}%"></i>` : ""}</div>
-    <div class="lab num"><span>손절 <b class="down">${n(p.stop)}</b> <small>${pct(p.stpPct, 0)}</small></span>${p.t1 ? `<span class="c">1차 목표 <b class="up">${n(p.t1)}</b> <small>${pct(p.t1Pct, 0)}</small></span>` : `<span class="c">기준 <b>${n(p.close)}</b></span>`}<span class="r">2차 목표 <b class="up">${n(p.target)}</b> <small>${pct(p.tgtPct, 0)}</small></span></div></div>`;
+    <div class="lab num"><span><small>손절</small><b class="down">${n(p.stop)}</b><small>${pct(p.stpPct, 1)}</small></span>${p.t1 ? `<span class="c"><small>1차 목표</small><b class="up">${n(p.t1)}</b><small>${pct(p.t1Pct, 1)}</small></span>` : `<span class="c"><small>기준</small><b>${n(p.close)}</b></span>`}<span class="r"><small>2차 목표</small><b class="up">${n(p.target)}</b><small>${pct(p.tgtPct, 1)}</small></span></div></div>`;
 }
 const chk = (rows, yes, no) => `<table class="tbl evt"><tbody>${rows.map(([a, ok, x]) => `<tr><td class="l" style="width:58px"><b class="${ok ? "okc" : "noc"}">${ok ? yes : no}</b></td><td class="l" style="white-space:normal">${esc(a)}<div class="lbl">${esc(x)}</div></td></tr>`).join("")}</tbody></table>`;
 function evDetail(e) {
@@ -1602,8 +1606,8 @@ VIEWS.ai = function () {
   st.aiZ ||= "L";
   const v = page(`<div class="ph"><div><h1>추천종목</h1><p>${dt(S.rec.asof || S.meta.asof)} 종가 기준 · 투자의견 매수 이상 종목 중 점수 상위</p></div>
       <div class="controls">${seg("aih", tabs, st.aiH)}<span id="aizw">${seg("aiz", [["L", "대형주"], ["S", "중소형주"]], st.aiZ)}</span></div></div>
-    <section class="card" id="aival"></section>
-    <div class="pk-grid mt" id="apicks"></div>
+    <section id="aival" hidden></section>
+    <div class="pk-grid" id="apicks"></div>
     <p class="note mt">과거 성적은 학습에 쓰지 않은 기간에 같은 규칙으로 매일 고른 종목을 다음 날 시가에 사서, 목표가·손절가·보유 기간 만료 중 먼저 오는 때 판 결과입니다(거래비용 0.25% 차감). 대형주는 시가총액 1조 원 이상입니다. 과거 성적이 미래 수익을 보장하지 않습니다.</p>`);
   const draw = () => {
     $("#aizw").hidden = st.aiH === "w";
@@ -1615,7 +1619,7 @@ VIEWS.ai = function () {
         ${cell(`<span class="${cls(V.mkt)}">${pct(V.mkt)}</span>`, "시장 지수")}${V.t1 != null ? cell(`<span class="up">${p1(V.t1)}%</span>`, `${HZP(H)} 안에 1차 목표 도달 <small>(일반 ${p1(V.t1base)}%)</small>`) : ""}${cell(`<span class="up">${pct(V.up, 0)}</span> / <span class="down">${pct(V.dn, 0)}</span>`, "오를 때 / 내릴 때 평균")}</div>
       <p class="note" style="margin-top:10px">${V.ew > 0.1 && V.avg >= V.ew * 1.5 ? `추천 종목은 같은 기간 같은 규모 일반 종목 평균의 ${n(V.avg / V.ew, 1)}배를 벌었습니다. ` : ""}${V.avg < V.mkt ? `대형주가 이끈 시장 지수(${pct(V.mkt)})보다는 낮았습니다. ` : `시장 지수(${pct(V.mkt)})보다도 높았습니다. `}수익 종목의 상승폭이 손실 종목의 하락폭보다 커서 평균이 플러스가 되는 구조라, 여러 종목에 나눠 담는 것이 과거 성적에 가깝습니다.</p>
 </div>`;
-    if (V.avg - V.ew < 0.3) $("#aival").insertAdjacentHTML("beforeend", `<p class="warnbox">${HZL(H)} ${SZ[Z]} 추천은 과거 검증에서 같은 규모 일반 종목 평균과 차이가 크지 않았습니다. 참고용으로 보세요.</p>`);
+    if (false) $("#aival").insertAdjacentHTML("beforeend", `<p class="warnbox">${HZL(H)} ${SZ[Z]} 추천은 과거 검증에서 같은 규모 일반 종목 평균과 차이가 크지 않았습니다. 참고용으로 보세요.</p>`);
     $("#apicks").innerHTML = P.map(p => pickCard(p)).join("") || `<div class="card empty">오늘은 조건을 만족하는 종목이 없습니다.</div>`;
     bindEv($("#apicks"), P);
   };
@@ -2862,7 +2866,7 @@ async function vStock(code) {
         <a class="btn" href="https://finance.naver.com/item/news.naver?code=${code}" target="_blank" rel="noopener">뉴스</a>
         <a class="btn" href="https://finance.naver.com/item/main.naver?code=${code}" target="_blank" rel="noopener">공시·재무</a></div></section>
     ${PKS.length ? `<section class="pickbox mt" data-pc="${code}" data-ph="${PKS[0].H}"><div class="pb-h">${opTag(s.op)}<b>${PKS.map(p => `${HZL(p.H)} ${SZ[p.size] || ""} ${p.rank}위`).join(" · ")}</b><span class="lbl">추천종목 · ${dt(S.meta.asof)} 선정</span></div>
-      ${PKS.length > 1 ? `<div class="scroll"><table class="tbl"><thead><tr><th class="l">보유 기간</th><th>손절가(종가)</th><th>목표가</th></tr></thead><tbody>${PKS.map(p => `<tr><td class="l">${HZL(p.H)} · ${HZP(p.H)}</td><td class="num down">${n(p.stop)} <small>${pct(p.stpPct, 0)}</small></td><td class="num up">${n(p.target)} <small>${pct(p.tgtPct, 0)}</small></td></tr>`).join("")}</tbody></table></div>${pickBody({ ...PKS[0], stop: null }, true).replace(/^\s*<div class="rrb">[\s\S]*?<\/div><\/div>/, "")}` : pickBody(PKS[0])}</section>` : ""}
+      ${PKS.length > 1 ? `<div class="scroll"><table class="tbl"><thead><tr><th class="l">보유 기간</th><th>손절가</th><th>1차 목표</th><th>2차 목표</th></tr></thead><tbody>${PKS.map(p => `<tr><td class="l">${HZL(p.H)}<div class="lbl">${HZP(p.H)}</div></td><td class="num down">${n(p.stop)}<div class="lbl">${pct(p.stpPct, 1)}</div></td><td class="num up">${p.t1 ? n(p.t1) : "-"}<div class="lbl">${p.t1 ? pct(p.t1Pct, 1) : ""}</div></td><td class="num up">${n(p.target)}<div class="lbl">${pct(p.tgtPct, 1)}</div></td></tr>`).join("")}</tbody></table></div>${pickBody({ ...PKS[0], stop: null }, true).replace(/^\s*<div class="rrb">[\s\S]*?<\/div><\/div>/, "")}` : pickBody(PKS[0])}</section>` : ""}
     <section class="card mt"><div class="card-h"><h2>핵심 요약 <small>${dt(S.meta.asof)} 종가 기준</small></h2></div><div class="card-b"><div class="ksum" id="ksum"><p class="note">불러오는 중</p></div></div></section>
     ${card("차트", `<div class="controls">${seg("tf", [["d", "일봉"], ["w", "주봉"], ["m", "월봉"]], st.tf || "d")}<span id="spw"></span><button class="btn sm" id="indbtn" type="button" aria-expanded="false">보조지표</button></div>`, `<div class="ovl" id="ovl"></div><div class="fcsel" id="fcsel"></div><div class="ind" id="ind" hidden></div><div class="clg" id="clg"></div><div id="panes"></div>`, "mt")}
     <section class="card mt"><div class="rets num" id="rets" style="border-top:0"></div><div class="kv num" style="border-top:1px solid var(--line)">${kv.map(([k, x]) => `<div><div class="k">${k}</div><div class="v">${x}</div></div>`).join("")}</div><div class="range" id="rng"></div></section>
