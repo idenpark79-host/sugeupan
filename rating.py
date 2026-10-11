@@ -55,7 +55,7 @@ def _index(ret: pd.DataFrame, w: pd.DataFrame, cols) -> pd.Series:
     return (num / den.replace(0, np.nan)).fillna(0)
 
 
-def build(prices: dict, cap: dict, names: dict, krx: dict | None = None, log=print, min_amt=3e8, flows: dict | None = None):
+def build(prices: dict, cap: dict, names: dict, krx: dict | None = None, log=print, min_amt=3e8, flows: dict | None = None, fund: dict | None = None):
     codes = [c for c in prices if c in cap]
     W = _wide(prices, codes)
     O, Hh, L, C, V = W["O"], W["H"], W["L"], W["C"], W["V"]
@@ -135,7 +135,26 @@ def build(prices: dict, cap: dict, names: dict, krx: dict | None = None, log=pri
             F[f"f_{k}5"] = net.rolling(5, min_periods=3).sum() / (amt60 * 5)
         if "f_frg20" in F:
             F["f_smart"] = sum((F[f"f_{k}20"] > 0).astype("float32") for k in ("frg", "pen", "trust") if f"f_{k}20" in F).where(F["f_frg20"].notna())
-    RANK = ["r5", "r20", "r60", "r120", "mom", "hi52", "d20", "d60", "vol20", "amtr", "liq", "rsi", "rs20", "rs60"]
+    # 재무 — 월말 BPS·EPS·DPS를 다음 달까지 이어 쓰고 매일 주가로 나눔: 장부가치/주가(1/PBR), 이익/주가(1/PER), 배당/주가
+    #        같은 날 전체 순위와 같은 업종 안 순위(업종마다 적정 PBR이 달라서)
+    if fund:
+        th_ser = pd.Series(th).reindex(codes).fillna("기타")
+        for k_, col in (("by", "BPS"), ("ey", "EPS"), ("dy", "DPS")):
+            snap = pd.DataFrame({d_: df_[col] for d_, df_ in fund.items() if col in df_}).T.sort_index()
+            if snap.empty:
+                continue
+            snap = snap.reindex(columns=codes)
+            snap.index = snap.index + pd.Timedelta(days=1)            # 월말 값은 다음 날부터 사용
+            base = snap.reindex(snap.index.union(dates)).ffill().reindex(dates)
+            val_ = base / C
+            if k_ == "by":
+                val_ = val_.where(base > 0)
+            F[k_] = val_.where(np.isfinite(val_))
+        for k_ in ("by", "ey", "dy"):
+            if k_ in F:
+                F["k_" + k_ + "_t"] = F[k_].T.groupby(th_ser).rank(pct=True).T          # 업종 안 순위
+        log("    재무 특징 추가: 1/PBR · 1/PER · 배당수익률 (전체·업종 내 순위)")
+    RANK = ["r5", "r20", "r60", "r120", "mom", "hi52", "d20", "d60", "vol20", "amtr", "liq", "rsi", "rs20", "rs60"] + [k for k in ("by", "ey", "dy") if k in F]
     for k in RANK:
         F["k_" + k] = F[k].rank(axis=1, pct=True)
     names_f = list(F)
@@ -258,6 +277,16 @@ def build(prices: dict, cap: dict, names: dict, krx: dict | None = None, log=pri
         FH[Hf] = tab(np.ones(len(zf), bool))
         v_ = fhv[str(Hf)]
         log(f"    {Hf}일 예상 범위 검증: 80% 범위 적중 {v_['c80']}% · 오를 확률 상위 20%의 실제 상승 {v_['pHi']}% vs 하위 20% {v_['pLo']}%")
+    vstudy = []
+    for k_, nm in (("by", "PBR 낮음(장부가치 대비 쌈)"), ("ey", "PER 낮음(이익 대비 쌈)"), ("dy", "배당수익률 높음")):
+        if "k_" + k_ not in F:
+            continue
+        kv = F["k_" + k_].values[V2.d.values, V2.c.values]
+        top, bot = kv >= 0.8, kv <= 0.2
+        pk_ = V2.pct.values >= 0.75
+        vstudy.append([nm, round(float(np.nanmean(V2.y.values[top])) * 100, 2), round(float(np.nanmean(V2.y.values[bot])) * 100, 2),
+                       round(float(np.nanmean(V2.y.values[pk_ & (kv >= 0.5)])) * 100, 2), round(float(np.nanmean(V2.y.values[pk_ & (kv < 0.5)])) * 100, 2)])
+        log(f"    재무 검증 {nm}: 상위 20% {vstudy[-1][1]:+.2f}%p · 하위 20% {vstudy[-1][2]:+.2f}%p · 매수 의견 중 싼 쪽 {vstudy[-1][3]:+.2f}%p vs 비싼 쪽 {vstudy[-1][4]:+.2f}%p")
     log("    투자의견 검증(다음 1개월 시장 대비): " + " · ".join(f"{LV[int(k)]} {v[0]:+.2f}%p" for k, v in val.items()))
 
     # 주도섹터 검증: 매주 순위 상위 3 / 하위 3 섹터의 다음 1개월 시장 대비
@@ -368,7 +397,7 @@ def build(prices: dict, cap: dict, names: dict, krx: dict | None = None, log=pri
                                         + [round(float(T[kq * 3 + tb, 5]) * 100, 1), round(float(T[kq * 3 + tb, 6] * v_ * np.sqrt(Hf)) * 100, 2)]
                                for Hf, T in FH.items()}
     meta = {"asof": str(pd.Timestamp(dates[-1]).date()), "n": len(out), "oos": [str(pd.Timestamp(dates[starts[0]]).date()), str(pd.Timestamp(dates[-1]).date())],
-            "val": val, "fc": fcv, "fh": fhv, "monthly": monthly[-36:], "consist": round(consist * 100, 1) if consist is not None else None,
+            "val": val, "fc": fcv, "fh": fhv, "value": vstudy, "monthly": monthly[-36:], "consist": round(consist * 100, 1) if consist is not None else None,
             "dec": [round(float(v) * 100, 2) for v in dec.values], "tval": tval, "cut": CUT,
             "market": [[str(pd.Timestamp(d_).date()), round(float(v / mser.iloc[0]), 4)] for d_, v in mser.items()],
             "mret": {"r1d": float(midx.pct_change().iloc[-1]), "r1w": float(midx.pct_change(5).iloc[-1]),

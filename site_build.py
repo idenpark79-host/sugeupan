@@ -142,7 +142,7 @@ class Source:
         try:
             f = self.k.get_market_fundamental(self.day, market="ALL")
             f.index = f.index.astype(str)
-            u = u.join(f[["PER", "PBR", "DIV"]], on="Code")
+            u = u.join(f[[c for c in ("PER", "PBR", "DIV", "BPS", "EPS", "DPS") if c in f.columns]], on="Code")
         except Exception as e:
             log("투자지표 실패", e)
         try:
@@ -214,6 +214,37 @@ class Source:
 
     def kospi(self, years):
         return rawdata.demo_series("^KS11", 252 * years) if self.demo else rawdata.fetch("^KS11", f"{years}y")
+
+    def fund_hist(self, dates) -> dict | None:
+        """월말마다 전 종목 BPS·EPS·DPS(한국거래소 투자지표) — 재무 지표 학습용. 미리보기·데모에서는 없음."""
+        if self.demo or self.sample_flow:
+            return None
+        import time
+        CACHE = ROOT / "cache"
+        CACHE.mkdir(exist_ok=True)
+        idx = pd.DatetimeIndex(dates)
+        ends = pd.Series(idx, index=idx).groupby(idx.to_period("M")).max().tolist()
+        out = {}
+        for d in ends:
+            ds = pd.Timestamp(d).strftime("%Y%m%d")
+            f = CACHE / f"fund_{ds}.csv"
+            df = None
+            if f.exists():
+                df = pd.read_csv(f, index_col=0, dtype={0: str})
+            else:
+                for k in range(3):
+                    try:
+                        df = self.k.get_market_fundamental(ds, market="ALL")
+                        break
+                    except Exception:
+                        time.sleep(1 + k)
+                if df is not None and len(df):
+                    df.to_csv(f)
+            if df is not None and len(df):
+                df.index = df.index.astype(str).str.zfill(6)
+                out[pd.Timestamp(d)] = df[[c for c in ("BPS", "EPS", "DPS") if c in df.columns]].astype(float)
+        log(f"    재무 지표 {len(out)}개월")
+        return out or None
 
     def hist(self, code):
         if self.demo:
@@ -552,7 +583,13 @@ def build_themes(rt: dict | None, lst: pd.DataFrame, metrics: dict):
     dump("themes.json", {"ok": True, "asof": m["asof"], "themes": rows, "market": m["market"][::2] + [m["market"][-1]],
                          "mret": {k: r2(v * 100) for k, v in m["mret"].items()},
                          "val": m["val"], "monthly": m["monthly"], "consist": m["consist"], "dec": m["dec"], "tval": m["tval"],
-                         "oos": m["oos"], "n": m["n"], "cut": m["cut"], "fc": m.get("fc"), "fh": m.get("fh")})
+                         "oos": m["oos"], "n": m["n"], "cut": m["cut"], "fc": m.get("fc"), "fh": m.get("fh"), "value": m.get("value")})
+    try:
+        (ROOT / "track").mkdir(exist_ok=True)
+        (ROOT / "track" / "model.json").write_text(json.dumps({"asof": m.get("asof"), "val": m.get("val"), "fh": m.get("fh"), "value": m.get("value"),
+            "picks": {h: x.get("segs", {}) for h, x in (rt.get("picks") or {}).items() if h != "warn"}}, ensure_ascii=False, indent=1), encoding="utf-8")
+    except Exception as e:
+        log("모델 기록 실패", e)
 
 
 def build_patterns(pstats: dict | None):
@@ -698,8 +735,13 @@ def main():
             pstats, ext_prices = signal_stats(src, lst, sc, pn, scan_prices, years)
             log("섹터 동향·투자의견")
             try:
+                try:
+                    fund = src.fund_hist(next(iter(ext_prices.values())).index if ext_prices else [])
+                except Exception as e:
+                    log("재무 지표 실패", e)
+                    fund = None
                 rt = rating.build(ext_prices, dict(zip(lst.Code, lst.Marcap)), dict(zip(lst.Code, lst.Name)), sectors_map, log=log,
-                                  flows=None if (src.demo or src.sample_flow) else scan_flows)
+                                  flows=None if (src.demo or src.sample_flow) else scan_flows, fund=fund)
             except Exception as e:
                 import traceback
                 traceback.print_exc()

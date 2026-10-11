@@ -1553,6 +1553,7 @@ const chk = (rows, yes, no) => `<table class="tbl evt"><tbody>${rows.map(([a, ok
 function evDetail(e) {
   if (e.k === "추세 템플릿" && e.rows?.length) return chk(e.rows, "충족", "미충족") +
     `<p class="note">8개 중 7개는 이 종목 자체의 이동평균선 배열과 52주 가격 위치를 보는 <b>절대 기준</b>이고, 마지막 1개(상대강도)만 다른 종목과 비교하는 <b>상대 기준</b>입니다. 장기 이평선이 정배열로 올라가고 주가가 그 위에 있으면 상승 추세(2단계)로 보며, 6개 이상이면 충족으로 표시합니다.</p>`;
+  if (e.k === "밸류에이션" && e.rows?.length) return chk(e.rows, "긍정", "중립") + `<p class="note">${esc(e.text || "")}</p>`;
   if (e.k === "기술적 신호" && e.rows?.length) return chk(e.rows, "긍정", "부정") +
     `<p class="note">정배열·골든크로스는 추세 방향, MACD는 상승 탄력, RSI·볼린저밴드는 과열 여부를 봅니다. 한 가지 신호만으로 판단하지 않고 여러 신호가 같은 방향을 가리킬 때 신뢰도가 높아집니다.</p>`;
   if (e.k === "수급") {
@@ -1596,7 +1597,7 @@ function pickCard(p) {
 VIEWS.ai = function () {
   if (!S.rec?.ok) { page(`<div class="ph"><div><h1>추천종목</h1></div></div><div class="card empty">추천종목 산출 결과가 아직 없습니다.</div>`); return; }
   const hs = [5, 20, 60].filter(h => recH(h)), W = S.rec.warn;
-  const tabs = [...hs.map(h => [h, `${HZL(h)} ${HZP(h)}`]), ...(W?.list?.length ? [["w", "하락 주의"]] : [])];
+  const tabs = [...hs.map(h => [h, `${HZL(h)} ${HZP(h)}`]), ...([])];
   if (!tabs.some(t => String(t[0]) === String(st.aiH))) st.aiH = hs.includes(20) ? 20 : hs[0];
   st.aiZ ||= "L";
   const v = page(`<div class="ph"><div><h1>추천종목</h1><p>${dt(S.rec.asof || S.meta.asof)} 종가 기준 · 투자의견 매수 이상 종목 중 점수 상위</p></div>
@@ -1611,9 +1612,9 @@ VIEWS.ai = function () {
     const cell = (x, k) => `<div><span class="v">${x}</span><span class="k">${k}</span></div>`;
     $("#aival").innerHTML = `<div class="card-h"><h2>이 방법으로 골랐다면 <small>${SZ[Z]} · ${V.from ? `${dt(V.from)} ~ ${dt(V.to)} · ` : ""}${(V.n || 0).toLocaleString()}번 추천 기준</small></h2></div>${R.rule ? `<p class="lbl" style="padding:12px 16px 0;font-size:12.5px">고르는 방법: ${esc(R.rule)}</p>` : ""}
       <div class="card-b"><div class="summ num">${cell(`<span class="${cls(V.avg)}">${pct(V.avg)}</span>`, `추천 종목 ${HZP(H)} 평균`)}${cell(`<span class="${cls(V.ew)}">${pct(V.ew)}</span>`, `같은 규모 일반 종목`)}
-        ${cell(`<span class="${cls(V.mkt)}">${pct(V.mkt)}</span>`, "시장 지수")}${V.t1 != null ? cell(`<span class="up">${p1(V.t1)}%</span>`, `${HZP(H)} 안에 1차 목표 도달 <small>(일반 ${p1(V.t1base)}%)</small>`) : ""}${cell(V.win2 != null ? `${p1(V.win)}% <span class="flat">/</span> <span class="up">${p1(V.win2)}%</span>` : `${p1(V.win)}%`, V.win2 != null ? "수익 마감 (끝까지 보유 / 분할 매도)" : "수익 마감 비율")}${cell(`<span class="up">${pct(V.up, 0)}</span> / <span class="down">${pct(V.dn, 0)}</span>`, "오를 때 / 내릴 때 평균")}</div>
+        ${cell(`<span class="${cls(V.mkt)}">${pct(V.mkt)}</span>`, "시장 지수")}${V.t1 != null ? cell(`<span class="up">${p1(V.t1)}%</span>`, `${HZP(H)} 안에 1차 목표 도달 <small>(일반 ${p1(V.t1base)}%)</small>`) : ""}${cell(`<span class="up">${pct(V.up, 0)}</span> / <span class="down">${pct(V.dn, 0)}</span>`, "오를 때 / 내릴 때 평균")}</div>
       <p class="note" style="margin-top:10px">${V.ew > 0.1 && V.avg >= V.ew * 1.5 ? `추천 종목은 같은 기간 같은 규모 일반 종목 평균의 ${n(V.avg / V.ew, 1)}배를 벌었습니다. ` : ""}${V.avg < V.mkt ? `대형주가 이끈 시장 지수(${pct(V.mkt)})보다는 낮았습니다. ` : `시장 지수(${pct(V.mkt)})보다도 높았습니다. `}수익 종목의 상승폭이 손실 종목의 하락폭보다 커서 평균이 플러스가 되는 구조라, 여러 종목에 나눠 담는 것이 과거 성적에 가깝습니다.</p>
-      ${V.win2 != null ? `<p class="note"><b>분할 매도</b>는 1차 목표에 닿으면 절반을 팔고, 나머지는 손절가를 산 가격으로 올려 2차 목표·본전·기간 만료 중 먼저 오는 때 파는 방법입니다. 수익으로 끝나는 비율은 ${p1(V.win)}% → ${p1(V.win2)}%로 높아지지만, 크게 오르는 종목의 절반을 일찍 팔기 때문에 평균 수익은 ${pct(V.avg)} → ${pct(V.avg2)}로 줄어듭니다. 자주 이기는 쪽과 크게 버는 쪽 중 하나를 고르는 문제입니다.</p>` : ""}</div>`;
+</div>`;
     if (V.avg - V.ew < 0.3) $("#aival").insertAdjacentHTML("beforeend", `<p class="warnbox">${HZL(H)} ${SZ[Z]} 추천은 과거 검증에서 같은 규모 일반 종목 평균과 차이가 크지 않았습니다. 참고용으로 보세요.</p>`);
     $("#apicks").innerHTML = P.map(p => pickCard(p)).join("") || `<div class="card empty">오늘은 조건을 만족하는 종목이 없습니다.</div>`;
     bindEv($("#apicks"), P);
@@ -2353,6 +2354,11 @@ const EF = (() => {
   const tg = [40, 42, 41, 44, 43, 46, 45, 48, 47, 50];
   const fTG = fig2({ c: ohlc(tg, .8, 1), r: 66, h: 170, zone: [[9, 9, 50, 70, UP], [9, 9, 44, 50, DN]], hl: [[70, "2차 목표", UP, 1], [57, "1차 목표", UP, 1], [50, "매수가", "var(--ink)"], [44, "손절가", DN, 1]] });
 
+
+  // 밸류에이션 — 업종 안에서 PBR 비교 막대
+  const fVL = (() => { const D = [["A사", .62], ["B사", .85], ["업종 중앙값", 1.1, 1], ["C사", 1.35], ["D사", 2.4]], W = 360, H = 150, mx = 2.6, bw = 46;
+    return `<svg viewBox="0 0 ${W} ${H}" role="img">${D.map(([t, v, m], i) => { const x = 22 + i * 68, h = v / mx * 108, y = 118 - h;
+      return `<rect x="${x}" y="${y}" width="${bw}" height="${h}" fill="${m ? "var(--ink-2)" : v < 1.1 * .8 ? "var(--s1)" : v > 1.1 * 1.5 ? "var(--s4)" : "var(--line-strong)"}"/><text x="${x + bw / 2}" y="${y - 5}" font-size="11" text-anchor="middle" fill="var(--ink)">${v.toFixed(2)}</text><text x="${x + bw / 2}" y="${136}" font-size="11" text-anchor="middle" fill="var(--ink-2)">${t}</text>`; }).join("")}<line x1="10" x2="${W - 10}" y1="118" y2="118" stroke="var(--line)"/></svg>`; })();
   // 지속 패턴
   const cont = `<div class="efigs four">${shape([[0, 10], [30, 75], [40, 66], [48, 72], [58, 62], [66, 68], [76, 58], [100, 96]], null, "<b>상승 깃발형</b> 급등 뒤 살짝 내려가는 짧은 통로")}${shape([[0, 15], [30, 80], [44, 62], [56, 76], [66, 66], [74, 72], [80, 69], [100, 98]], null, "<b>페넌트</b> 급등 뒤 작은 삼각형으로 수렴")}${shape([[0, 20], [20, 60], [34, 46], [52, 76], [64, 66], [78, 84], [88, 80], [100, 50]], null, "<b>상승 쐐기</b> 고점·저점이 좁아지며 오르다 아래로 이탈")}${shape([[0, 30], [16, 70], [30, 40], [46, 70], [60, 40], [76, 70], [90, 42], [100, 92]], [0, 70, 100, 70], "<b>박스권 돌파</b> 같은 범위를 오가다 상단 돌파")}</div>`;
 
@@ -2492,6 +2498,17 @@ const EF = (() => {
         <p>이 사이트의 중장기 추천은 이 중 7개 이상을 만족하는 종목에서만 고릅니다. 반대로 3개 이하인 종목은 4단계일 가능성이 높아 하락 주의 판단에 참고합니다.</p>`,
       terms: [["상대강도(RS)", "다른 종목과 비교한 수익률 순위. 지수가 빠질 때 덜 빠지고, 오를 때 더 오르는 종목이 RS가 높습니다."], ["2단계 상승", "장기 이동평균선이 정배열로 함께 오르는 구간."]],
       sig: ["hi52", "near_high", "ath", "lo52", "ma240_up", "ma240_dn"] },
+    { t: "밸류에이션", s: "PER·PBR·EPS·BPS로 보는 싸고 비쌈",
+      fig: wrap(fVL, "같은 업종 안에서 PBR을 비교한 예시입니다. 업종 중앙값보다 20% 넘게 낮으면 저평가(A사·B사), 1.5배 넘게 높으면 고평가(D사)로 봅니다."),
+      body: `<p>차트가 "사람들이 지금 어떻게 사고파는지"를 본다면, 재무 지표는 "회사가 실제로 얼마를 벌고 얼마를 가졌는지"에 비해 주가가 싼지 비싼지를 봅니다.</p>
+        <ul class="eul"><li><b>EPS(주당순이익)</b> 1년 순이익 ÷ 주식 수. 주식 1주가 1년에 번 돈입니다.</li>
+        <li><b>PER = 주가 ÷ EPS</b> 1년 이익의 몇 배에 거래되는지. 10배면 지금 이익이 10년 쌓여야 주가가 된다는 뜻입니다. 적자 회사는 계산되지 않습니다.</li>
+        <li><b>BPS(주당순자산)</b> 회사가 가진 재산에서 빚을 뺀 금액 ÷ 주식 수. 회사를 지금 정리하면 1주당 돌려받을 몫에 가깝습니다.</li>
+        <li><b>PBR = 주가 ÷ BPS</b> 1배 미만이면 장부상 재산보다 싸게 거래된다는 뜻입니다.</li>
+        <li><b>배당수익률 = 주당배당금 ÷ 주가</b> 주가 대비 1년에 받는 배당 비율입니다.</li></ul>
+        <p>업종마다 적정 수준이 크게 다릅니다. 은행·철강은 PBR 1배 미만이 흔하고, 바이오·인터넷은 몇 배가 보통입니다. 그래서 이 사이트는 전체 종목이 아니라 <b>같은 업종 중앙값</b>과 비교합니다. 싸다고 무조건 오르지는 않습니다. 이익이 줄어드는 회사는 계속 싸게 남아 있기도 해서(가치 함정), 추세·수급과 함께 봅니다.</p>`,
+      terms: [["가치 함정", "싸 보이지만 이익이 계속 줄어 주가도 계속 싼 상태로 머무는 것."], ["ROE", "자기자본 대비 순이익(= PBR ÷ PER). 높을수록 가진 재산으로 돈을 잘 법니다."]],
+      sig: [], val: true },
     { t: "수급 읽기", s: "누가 사고 누가 파는가 — 투자 주체별 특성",
       fig: wrap(fFX, "아래 창은 외국인 누적 순매수입니다. ① 주가가 바닥에서 옆으로 기는 동안 외국인은 조용히 사 모으고, ② 그 뒤 주가가 오르기 시작합니다.", [[S1, "외국인 누적 순매수"]]),
       body: `<p>주식시장에는 성격이 전혀 다른 참여자들이 있습니다. 같은 "기관 순매수"라도 연기금이 사는 것과 증권사 자기매매가 사는 것은 의미가 다릅니다. 매매 기간, 사는 이유, 정보력이 다르기 때문입니다. 순매수 금액뿐 아니라 <b>얼마나 꾸준히</b> 사는지(20일 중 며칠 샀는지)를 함께 봐야 합니다.</p>
@@ -2552,6 +2569,7 @@ VIEWS.edu = function () {
     <article class="eart"><header><span class="lbl">${i + 1} / ${EF.length}</span><h2>${c.t}</h2><p>${c.s}</p></header>
       ${c.fig}${c.body}
       ${c.inv ? invTable() : ""}
+      ${c.val && S.th?.value?.length ? `<table class="tbl evt mt"><thead><tr><th class="l">10년 데이터 검증 (다음 1개월, 시장 대비)</th><th>해당 상위 20%</th><th>하위 20%</th></tr></thead><tbody>${S.th.value.map(r => `<tr><td class="l">${esc(r[0])}</td><td class="num ${cls(r[1])}">${pct(r[1])}p</td><td class="num ${cls(r[2])}">${pct(r[2])}p</td></tr>`).join("")}</tbody></table>` : ""}
       ${c.terms.length ? `<dl class="eterm">${c.terms.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join("")}</dl>` : ""}
       ${c.last && R.length ? `<p class="ebox">이 사이트가 분석한 기술적 신호 ${R.length}개 중 ${flat}개는 1개월 성과가 시장 평균과 ±0.5%p 이내로 차이가 거의 없었습니다. 한 가지 신호보다 여러 근거와 원칙이 중요한 이유입니다. 신호별 전체 통계는 <a href="#pat">기술적 신호</a>, 규칙대로 사고팔았을 때의 성과는 <a href="#bt">전략 검증</a>에서 볼 수 있습니다.</p>` : ""}
       ${stat}
@@ -2794,6 +2812,10 @@ function kSum(s, d, F) {
     `<div class="lbl" style="margin-top:4px">점수·추세가 비슷했던 과거 종목들이 실제로 움직인 범위입니다. 차트의 '예상 범위'에서 기간을 바꿔 볼 수 있어요.</div>`]);
   else if (fc) R.push(["1개월 예상", `시장 평균보다 <b class="${cls(fm)}">${pct(fm, 1)}p</b> ${fm >= 0 ? "더 오를" : "덜 오를(더 내릴)"} 것으로 예상 · 점수가 비슷했던 과거 종목 10개 중 8개는 1개월 뒤 시장 대비 ${pct(fc[0], 0)}p ~ ${pct(fc[4], 0)}p 사이에서 끝났어요${S.th?.fc ? ` <span class="lbl">(실제로 이 범위 안에 든 비율 ${p1(S.th.fc.c80)}%)</span>` : ""}`]);
   if (w) R.push(["추세", esc(w.head)]);
+  const me = S.by[d.code || s?.code] || s;
+  if (me && (me.per || me.pbr)) { const peers = S.list.filter(x => x.sector === me.sector && x.code !== me.code), md = k => { const v = peers.map(x => x[k]).filter(x => x > 0 && x < 200).sort((a, b) => a - b); return v.length >= 3 ? v[v.length >> 1] : null; };
+    const mpe = md("per"), mpb = md("pbr"), cheap = (me.per && mpe && me.per < mpe * .8) || (me.pbr && mpb && me.pbr < mpb * .8), rich = (me.per && mpe && me.per > mpe * 1.5) || (me.pbr && mpb && me.pbr > mpb * 1.5);
+    R.push(["밸류에이션", `PER <b>${me.per ? n(me.per, 1) + "배" : "적자"}</b>${mpe ? ` <span class="lbl">(업종 ${n(mpe, 1)})</span>` : ""} · PBR <b>${me.pbr ? n(me.pbr, 2) + "배" : "-"}</b>${mpb ? ` <span class="lbl">(업종 ${n(mpb, 2)})</span>` : ""}${me.div ? ` · 배당 ${n(me.div, 1)}%` : ""} · ${cheap ? "업종 대비 저평가" : rich ? "업종 대비 고평가" : "업종 평균 수준"}`]); }
   const S1 = ta.support?.[0]?.[0], R1 = ta.resist?.[0]?.[0];
   if (S1 || R1) R.push(["가격대", [S1 ? `지지 <b>${n(S1)}</b>` : "", R1 ? `저항 <b>${n(R1)}</b>` : ""].filter(Boolean).join(" · ")]);
   if (F) { const t = nm => sum(F[nm].slice(-20)); R.push(["수급 20일", `외국인 <b class="${cls(t("외국인"))}">${eok(t("외국인"))}</b> · 기관 <b class="${cls(t("기관합계"))}">${eok(t("기관합계"))}</b>`]); }

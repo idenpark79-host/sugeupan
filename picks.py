@@ -341,8 +341,7 @@ def _plan(Hh, s0, r_, val, t1p=None):
     return {"stop": f"이 종목은 하루에 평균 {s0 * 100:.1f}% 정도 오르내려요. {HZ[Hh][1]}이면 보통 {move:.0f}% 안팎까지 흔들릴 수 있어서, "
                     f"그보다 더 내려가 종가가 손절가 아래로 마감하면 '예상이 틀렸다'고 보고 다음 날 정리하는 가격이에요.{cap}",
             "t1": (f"이 종목이 {HZ[Hh][1]} 동안 보통 움직이는 폭의 절반({t1p * 100:.0f}%) 위예요. 과거 같은 방법으로 고른 종목은 {val.get('t1', 0):.0f}%가 "
-                   f"기간 안에 한 번 이상 이 높이에 닿았어요(같은 규모 일반 종목은 {val.get('t1base', 0):.0f}%). 닿으면 절반을 팔고 나머지의 손절가를 산 가격으로 올리세요. "
-                   f"과거 이렇게 했을 때 수익으로 끝난 비율은 {val.get('win2', 0):.0f}%(평균 {val.get('avg2', 0):+.1f}%), 끝까지 들고 있었을 때는 {val.get('win', 0):.0f}%(평균 {val.get('avg', 0):+.1f}%)였어요.") if t1p else "",
+                   f"기간 안에 한 번 이상 이 높이에 닿았어요(같은 규모 일반 종목은 {val.get('t1base', 0):.0f}%). 닿으면 일부를 팔아 수익을 확정하는 자리예요.") if t1p else "",
             "target": f"손절할 때 잃는 폭({r_ * 100:.0f}%)의 2배예요. 잃을 때보다 벌 때 2배 크게 가져가자는 원칙이에요. "
                       f"과거 같은 방법에서 2차 목표에 먼저 닿은 경우는 {val.get('hitT', 0):.0f}%였고, 닿지 않으면 {HZ[Hh][1]} 뒤 그때 가격으로 정리했어요."}
 
@@ -416,6 +415,48 @@ def _tech(c, code):
     return rows
 
 
+def _valuation(c, code):
+    """재무 — PER·PBR·EPS·BPS·배당을 같은 업종 중앙값과 비교."""
+    fund = c.get("fund")
+    if not fund:
+        return None
+    df = fund[max(fund)]
+    if code not in df.index:
+        return None
+    C = c["C"].ffill().iloc[-1]
+    th = c["th"]
+    t = th.get(code, "기타")
+    def ratios(cd):
+        if cd not in df.index or not np.isfinite(C.get(cd, np.nan)):
+            return None, None, None
+        b, e, d = (float(df.loc[cd].get(k, np.nan)) for k in ("BPS", "EPS", "DPS"))
+        px = float(C[cd])
+        return (px / e if e > 0 else None), (px / b if b > 0 else None), (d / px * 100 if np.isfinite(d) and d >= 0 else None)
+    per, pbr, dy = ratios(code)
+    mem = [cd for cd, tt in th.items() if tt == t and cd != code]
+    pe_s = [x for x in (ratios(cd)[0] for cd in mem) if x and x < 200]
+    pb_s = [x for x in (ratios(cd)[1] for cd in mem) if x and x < 50]
+    mpe, mpb = (float(np.median(pe_s)) if len(pe_s) >= 3 else None), (float(np.median(pb_s)) if len(pb_s) >= 3 else None)
+    row = df.loc[code]
+    n_ = lambda x, k=1: "-" if x is None else f"{x:,.{k}f}"
+    rows = [["PER (주가 ÷ 주당순이익)", bool(per and mpe and per < mpe), f"{n_(per)}배 · 업종 중앙값 {n_(mpe)}배" if per else "적자(주당순이익 0 이하)라 계산 불가"],
+            ["PBR (주가 ÷ 주당순자산)", bool(pbr and mpb and pbr < mpb), f"{n_(pbr, 2)}배 · 업종 중앙값 {n_(mpb, 2)}배"],
+            ["EPS (주당순이익)", bool(row.get("EPS", 0) > 0), f"{row.get('EPS', float('nan')):,.0f}원"],
+            ["BPS (주당순자산)", bool(row.get("BPS", 0) > 0), f"{row.get('BPS', float('nan')):,.0f}원"],
+            ["배당수익률", bool(dy and dy >= 2), f"{n_(dy, 2)}%"]]
+    cheap_pb = bool(pbr and mpb and pbr < mpb * 0.8)
+    cheap_pe = bool(per and mpe and per < mpe * 0.8)
+    rich = bool((pbr and mpb and pbr > mpb * 1.5) or (per and mpe and per > mpe * 1.5))
+    v = "업종 대비 저평가" if (cheap_pb or cheap_pe) else "업종 대비 고평가" if rich else "업종 평균 수준"
+    story = ""
+    if cheap_pb or cheap_pe:
+        parts = ([f"PER {per:.1f}배(업종 중앙값 {mpe:.1f}배)"] if cheap_pe else []) + ([f"PBR {pbr:.2f}배(업종 중앙값 {mpb:.2f}배)"] if cheap_pb else [])
+        story = f"같은 업종보다 싸게 거래되고 있어요 — {' · '.join(parts)}. 버는 돈과 가진 재산에 비해 주가가 낮다는 뜻이라, 오를 때 여유가 있어요."
+    text = ("PER은 회사가 1년에 버는 돈의 몇 배에 주가가 거래되는지, PBR은 회사가 가진 순자산의 몇 배인지를 뜻해요. 업종마다 적정 수준이 달라서 같은 업종 중앙값과 비교했어요. "
+            + ("다만 업종보다 비싸다는 것은 그만큼 성장 기대가 이미 주가에 반영돼 있다는 뜻이기도 해요." if rich else ""))
+    return {"v": v, "cheap": cheap_pb or cheap_pe, "rich": rich, "rows": rows, "text": text, "story": story}
+
+
 def _story(c, code, ci_, Hh, val):
     """초등학생도 알아듣게 — 왜 오를 거라고 봤는지 + 근거 4가지(누르면 자세히)."""
     F, t, th, tnow, flows = c["F"], c["nd"] - 1, c["th"], c["tnow"], c.get("flows") or {}
@@ -483,8 +524,10 @@ def _story(c, code, ci_, Hh, val):
         s.append("추세·업종·거래량을 함께 본 점수가 전체 종목 중 위쪽에 있어요.")
     s = s[:5]
     past = (f"과거에 같은 방법으로 추천한 종목을 {HZ[Hh][1]} 동안 들고 있었다면 평균 {val.get('avg', 0):+.1f}%였어요"
-            f"(같은 기간 같은 규모 일반 종목 평균 {val.get('ew', 0):+.1f}%). 추천 100번 중 {val.get('win', 0):.0f}번은 판 가격이 산 가격보다 높았고, "
-            f"그때는 평균 {val.get('up', 0):+.0f}%, 나머지는 평균 {val.get('dn', 0):.0f}%였어요.")
+            f"(같은 기간 같은 규모 일반 종목 평균 {val.get('ew', 0):+.1f}%).")
+    vr = _valuation(c, code)
+    if vr and vr["cheap"]:
+        s.append(vr["story"])
     tops = max(3, len(tnow) // 4)
     ev = [{"k": "수급", "v": (buyers[0][0] + (f" 외 {len(buyers) - 1}" if len(buyers) > 1 else "") + " 순매수") if buyers else ("자료 없음" if not frows else "주요 주체 매수 없음"),
            "ok": bool(buyers), "rows": frows},
@@ -496,4 +539,6 @@ def _story(c, code, ci_, Hh, val):
           {"k": "거래 증가", "v": f"{amtr:.1f}배" if amtr else "-", "ok": bool(amtr and amtr >= 1.2),
            "text": (f"최근 5일 하루 평균 거래대금 {a5:,.0f}억 원 ÷ 지난 3개월 하루 평균 {a60:,.0f}억 원 = {amtr:.1f}배. "
                     "1.2배 이상이면 평소보다 관심이 늘어난 것으로 봐요.") if a5 else ""}]
+    if vr:
+        ev.insert(3, {"k": "밸류에이션", "v": vr["v"], "ok": vr["cheap"], "rows": vr["rows"], "text": vr["text"]})
     return {"story": s, "past": past, "ev": ev}
