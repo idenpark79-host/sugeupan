@@ -215,35 +215,48 @@ class Source:
     def kospi(self, years):
         return rawdata.demo_series("^KS11", 252 * years) if self.demo else rawdata.fetch("^KS11", f"{years}y")
 
-    def fund_hist(self, dates) -> dict | None:
-        """월말마다 전 종목 BPS·EPS·DPS(한국거래소 투자지표) — 재무 지표 학습용. 미리보기·데모에서는 없음."""
+    def fund_hist(self, years: int = 10) -> dict | None:
+        """월말마다 전 종목 BPS·EPS·DPS(한국거래소 투자지표) — 재무 지표 학습용. 미리보기·데모에서는 없음.
+        한국거래소 로그인 세션이 오래 지나면 끊기므로 실행 초반(시세·수급 수집 전)에 받는다."""
+        self.fund_diag = {"months": 0, "fail": 0}
         if self.demo or self.sample_flow:
             return None
         import time
         CACHE = ROOT / "cache"
         CACHE.mkdir(exist_ok=True)
-        idx = pd.DatetimeIndex(dates)
-        ends = pd.Series(idx, index=idx).groupby(idx.to_period("M")).max().tolist()
+        end = pd.Timestamp(self.day)
+        try:
+            ends = pd.date_range(end - pd.DateOffset(years=years), end, freq="BME").tolist() + [end]
+        except ValueError:
+            ends = pd.date_range(end - pd.DateOffset(years=years), end, freq="BM").tolist() + [end]
         out = {}
         for d in ends:
-            ds = pd.Timestamp(d).strftime("%Y%m%d")
-            f = CACHE / f"fund_{ds}.csv"
             df = None
-            if f.exists():
-                df = pd.read_csv(f, index_col=0, dtype={0: str})
-            else:
-                for k in range(3):
-                    try:
-                        df = self.k.get_market_fundamental(ds, market="ALL")
-                        break
-                    except Exception:
-                        time.sleep(1 + k)
-                if df is not None and len(df):
-                    df.to_csv(f)
-            if df is not None and len(df):
-                df.index = df.index.astype(str).str.zfill(6)
-                out[pd.Timestamp(d)] = df[[c for c in ("BPS", "EPS", "DPS") if c in df.columns]].astype(float)
-        log(f"    재무 지표 {len(out)}개월")
+            for back in range(6):                                  # 월말이 휴일이면 하루씩 앞으로
+                ds = (d - pd.tseries.offsets.BDay(back)).strftime("%Y%m%d")
+                f = CACHE / f"fund_{ds}.csv"
+                if f.exists():
+                    df = pd.read_csv(f, index_col=0, dtype={0: str})
+                else:
+                    for k in range(3):
+                        try:
+                            df = self.k.get_market_fundamental(ds, market="ALL")
+                            break
+                        except Exception as e:
+                            self.fund_diag["err"] = repr(e)[:300]
+                            time.sleep(2 + 2 * k)
+                    if df is not None and len(df):
+                        df.to_csv(f)
+                if df is not None and len(df) and df.get("BPS", pd.Series(dtype=float)).abs().sum() > 0:
+                    break
+                df = None
+            if df is None:
+                self.fund_diag["fail"] += 1
+                continue
+            df.index = df.index.astype(str).str.zfill(6)
+            out[pd.Timestamp(ds)] = df[[c for c in ("BPS", "EPS", "DPS") if c in df.columns]].astype(float)
+        self.fund_diag["months"] = len(out)
+        log(f"    재무 지표 {len(out)}개월 (실패 {self.fund_diag['fail']})")
         return out or None
 
     def hist(self, code):
@@ -559,6 +572,9 @@ def signal_stats(src, lst, sc, pn, scan_prices, years):
     return st, {c: d[["Open", "High", "Low", "Close", "Volume"]] for c, d in ext.items() if d is not None}
 
 
+FUND_DIAG = {}
+
+
 def build_themes(rt: dict | None, lst: pd.DataFrame, metrics: dict):
     """섹터·테마 동향 — 주도섹터 순위, 대장주, 수급, 투자의견 분포."""
     if not rt:
@@ -586,7 +602,7 @@ def build_themes(rt: dict | None, lst: pd.DataFrame, metrics: dict):
                          "oos": m["oos"], "n": m["n"], "cut": m["cut"], "fc": m.get("fc"), "fh": m.get("fh"), "value": m.get("value")})
     try:
         (ROOT / "track").mkdir(exist_ok=True)
-        (ROOT / "track" / "model.json").write_text(json.dumps({"asof": m.get("asof"), "val": m.get("val"), "fh": m.get("fh"), "value": m.get("value"),
+        (ROOT / "track" / "model.json").write_text(json.dumps({"asof": m.get("asof"), "fund": FUND_DIAG, "val": m.get("val"), "fh": m.get("fh"), "value": m.get("value"),
             "picks": {h: x.get("segs", {}) for h, x in (rt.get("picks") or {}).items() if h != "warn"}}, ensure_ascii=False, indent=1), encoding="utf-8")
     except Exception as e:
         log("모델 기록 실패", e)
@@ -712,6 +728,13 @@ def main():
     else:
         src = Source(args.demo)
     lst = src.listing()
+    try:
+        fund = src.fund_hist(10)
+        FUND_DIAG.update(getattr(src, "fund_diag", {}))
+    except Exception as e:
+        FUND_DIAG["err"] = repr(e)[:300]
+        log("재무 지표 실패", e)
+        fund = None
     lst = lst[lst.Close > 0].reset_index(drop=True)
     kd = build_market(src, lst)
     build_ranks(src, lst, kd)
@@ -735,11 +758,6 @@ def main():
             pstats, ext_prices = signal_stats(src, lst, sc, pn, scan_prices, years)
             log("섹터 동향·투자의견")
             try:
-                try:
-                    fund = src.fund_hist(next(iter(ext_prices.values())).index if ext_prices else [])
-                except Exception as e:
-                    log("재무 지표 실패", e)
-                    fund = None
                 rt = rating.build(ext_prices, dict(zip(lst.Code, lst.Marcap)), dict(zip(lst.Code, lst.Name)), sectors_map, log=log,
                                   flows=None if (src.demo or src.sample_flow) else scan_flows, fund=fund)
             except Exception as e:
