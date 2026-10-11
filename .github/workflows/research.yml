@@ -2,6 +2,10 @@ name: Wake 연구 (추천 규칙 검증)
 
 on:
   workflow_dispatch:
+    inputs:
+      script:
+        description: "실행할 스크립트"
+        default: "tools/research_live.py"
 
 permissions:
   contents: write
@@ -22,7 +26,7 @@ jobs:
         env:
           KRX_ID: ${{ secrets.KRX_ID }}
           KRX_PW: ${{ secrets.KRX_PW }}
-        run: python tools/research_live.py
+        run: python ${{ inputs.script || 'tools/research_live.py' }}
       - name: 결과 저장 (research-results 브랜치)
         if: always()
         run: |
