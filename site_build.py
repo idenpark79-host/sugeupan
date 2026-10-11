@@ -552,7 +552,7 @@ def build_themes(rt: dict | None, lst: pd.DataFrame, metrics: dict):
     dump("themes.json", {"ok": True, "asof": m["asof"], "themes": rows, "market": m["market"][::2] + [m["market"][-1]],
                          "mret": {k: r2(v * 100) for k, v in m["mret"].items()},
                          "val": m["val"], "monthly": m["monthly"], "consist": m["consist"], "dec": m["dec"], "tval": m["tval"],
-                         "oos": m["oos"], "n": m["n"], "cut": m["cut"], "fc": m.get("fc")})
+                         "oos": m["oos"], "n": m["n"], "cut": m["cut"], "fc": m.get("fc"), "fh": m.get("fh")})
 
 
 def build_patterns(pstats: dict | None):

@@ -104,6 +104,34 @@ def _sim(A, d, cc, Hh, risk):
     return ret, stopped, hit, last / entry - 1 - COST
 
 
+def _sim_half(A, d, cc, Hh, risk, t1):
+    """분할 매도: 1차 목표에 닿으면 절반 매도 + 나머지 손절가를 매수가(본전)로 올림 → 2차 목표·본전 손절·기간 만료 중 먼저."""
+    O, Hi, Lo, C = A
+    e = O[d + 1, cc]
+    idx = d[:, None] + np.arange(1, Hh + 1)[None, :]
+    o, h, cl = O[idx, cc[:, None]], Hi[idx, cc[:, None]], C[idx, cc[:, None]]
+    out = np.full(len(d), np.nan)
+    for j in range(len(d)):
+        if not np.isfinite(e[j]):
+            continue
+        st, T1, T2, half, res, w = e[j] * (1 - risk[j]), e[j] * (1 + t1[j]), e[j] * (1 + RR * risk[j]), False, 0.0, 1.0
+        for k in range(Hh):
+            if not np.isfinite(cl[j, k]):
+                continue
+            if not half and h[j, k] >= T1:
+                res, w, half, st = 0.5 * (max(o[j, k], T1) / e[j] - 1), 0.5, True, e[j]
+            if h[j, k] >= T2:
+                out[j] = res + w * (max(o[j, k], T2) / e[j] - 1)
+                break
+            if cl[j, k] <= st:
+                px = o[j, k + 1] if k + 1 < Hh and np.isfinite(o[j, k + 1]) else cl[j, k]
+                out[j] = res + w * (px / e[j] - 1)
+                break
+        else:
+            out[j] = res + w * (C[d[j] + Hh, cc[j]] / e[j] - 1)
+    return out - COST
+
+
 def _risk(sig, Hh):
     lo, hi = RISK[Hh]
     return np.clip(K_STOP * sig * np.sqrt(Hh), lo, hi)
@@ -115,6 +143,8 @@ SEG = {"L": ("대형주", "시가총액 1조 원 이상"), "S": ("중소형주",
 def _val(V, dates):
     V = V.copy()
     t1 = {"t1": round(float(V.t1.mean()) * 100, 1), "t1base": round(float(V.t1b.mean()) * 100, 1)} if "t1" in V else {}
+    if "r2" in V and V.r2.notna().any():
+        t1.update({"win2": round(float((V.r2 > 0).mean()) * 100, 1), "avg2": round(float(V.r2.mean()) * 100, 2)})
     V["mo"] = pd.to_datetime(dates[V.d.values]).strftime("%Y-%m")
     mon = V.groupby("mo").agg(r=("r", "mean"), mk=("mk", "mean"))
     return {"n": int(len(V)), "avg": round(float(V.r.mean()) * 100, 2), "mkt": round(float(V.mk.mean()) * 100, 2),
@@ -162,21 +192,24 @@ def build(c: dict, log=print) -> dict:
             tq = thc[Q.c.values]
             Q = Q[(Q.assign(th_=tq).groupby(["d", "th_"]).cumcount().values < PER_THEME) | (tq == "기타")].groupby("d").head(TOPN)
             d, cc = Q.d.values.astype(int), Q.c.values.astype(int)
-            ret, st_, hit, hold = _sim(A, d, cc, Hh, _risk(sig[d, cc], Hh))
+            rk_ = _risk(sig[d, cc], Hh)
+            ret, st_, hit, hold = _sim(A, d, cc, Hh, rk_)
+            s0v = np.nan_to_num(sig[d, cc], nan=0.02) * np.sqrt(Hh)
+            ret2 = _sim_half(A, d, cc, Hh, rk_, np.minimum(K_T1 * s0v, RR * rk_ * 0.6))
             mk = midx[d + Hh] / midx[d] - 1
             segm = big[:-Hh - 1] if sg == "L" else ~big[:-Hh - 1]
             ew_day = np.nanmean(np.where(elig & segm, fw, np.nan), axis=1)
             t1b_day = np.nanmean(np.where(elig & segm & np.isfinite(sig[:-Hh - 1]), reach[:-Hh - 1], np.nan), axis=1)
             m = np.isfinite(ret) & np.isfinite(mk) & np.isfinite(reach[d, cc])
             V = pd.DataFrame({"d": d[m], "r": ret[m], "s": st_[m], "t": hit[m], "h": hold[m], "mk": mk[m], "ew": ew_day[d][m],
-                              "t1": reach[d, cc][m], "t1b": t1b_day[d][m]})
+                              "t1": reach[d, cc][m], "t1b": t1b_day[d][m], "r2": ret2[m]})
             allV.append(V)
             val = _val(V, dates) if len(V) else {}
             val["name"], val["desc"] = sname, sdesc
             res["segs"][sg] = val
             if len(V):
                 log(f"    추천 {HZ[Hh][0]}·{sname} 검증: 평균 {val['avg']:+.2f}% · 같은 규모 일반 종목 {val['ew']:+.2f}% · 지수 {val['mkt']:+.2f}% · "
-                    f"수익 마감 {val['win']}% · 1차 목표 도달 {val.get('t1')}% (같은 규모 {val.get('t1base')}%) · 목표 {val['hitT']}% · 손절 {val['hitS']}% · {val['n']:,}건")
+                    f"수익 마감 {val['win']}% (분할 매도 시 {val.get('win2')}%, 평균 {val.get('avg2')}%) · 1차 목표 도달 {val.get('t1')}% (같은 규모 {val.get('t1base')}%) · 목표 {val['hitT']}% · 손절 {val['hitS']}% · {val['n']:,}건")
             cand = [(ci_, float(p)) for ci_, p in op_today.items()
                     if p >= MIN_OP and amt60[t_last, ci_] >= MIN_AMT and np.isfinite(A[3][t_last, ci_])
                     and (big[t_last, ci_] if sg == "L" else not big[t_last, ci_])
@@ -308,7 +341,8 @@ def _plan(Hh, s0, r_, val, t1p=None):
     return {"stop": f"이 종목은 하루에 평균 {s0 * 100:.1f}% 정도 오르내려요. {HZ[Hh][1]}이면 보통 {move:.0f}% 안팎까지 흔들릴 수 있어서, "
                     f"그보다 더 내려가 종가가 손절가 아래로 마감하면 '예상이 틀렸다'고 보고 다음 날 정리하는 가격이에요.{cap}",
             "t1": (f"이 종목이 {HZ[Hh][1]} 동안 보통 움직이는 폭의 절반({t1p * 100:.0f}%) 위예요. 과거 같은 방법으로 고른 종목은 {val.get('t1', 0):.0f}%가 "
-                   f"기간 안에 한 번 이상 이 높이에 닿았어요(같은 규모 일반 종목은 {val.get('t1base', 0):.0f}%). 닿으면 일부를 팔아 수익을 확정하는 자리예요.") if t1p else "",
+                   f"기간 안에 한 번 이상 이 높이에 닿았어요(같은 규모 일반 종목은 {val.get('t1base', 0):.0f}%). 닿으면 절반을 팔고 나머지의 손절가를 산 가격으로 올리세요. "
+                   f"과거 이렇게 했을 때 수익으로 끝난 비율은 {val.get('win2', 0):.0f}%(평균 {val.get('avg2', 0):+.1f}%), 끝까지 들고 있었을 때는 {val.get('win', 0):.0f}%(평균 {val.get('avg', 0):+.1f}%)였어요.") if t1p else "",
             "target": f"손절할 때 잃는 폭({r_ * 100:.0f}%)의 2배예요. 잃을 때보다 벌 때 2배 크게 가져가자는 원칙이에요. "
                       f"과거 같은 방법에서 2차 목표에 먼저 닿은 경우는 {val.get('hitT', 0):.0f}%였고, 닿지 않으면 {HZ[Hh][1]} 뒤 그때 가격으로 정리했어요."}
 

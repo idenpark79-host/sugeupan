@@ -217,6 +217,47 @@ def build(prices: dict, cap: dict, names: dict, krx: dict | None = None, log=pri
     z1, z99 = np.quantile(zz, [.01, .99])
     QM = np.array([float(np.mean(np.clip(zz[kk == k], z1, z99))) if (kk == k).any() else 0.0 for k in range(10)])   # 분위별 평균(극단값 1% 제한)
     log(f"    1개월 예상 범위(시장 대비) 검증: 80% 범위 적중 {fcv['c80']}% · 50% 범위 적중 {fcv['c50']}% ({fcv['n']:,}건)")
+    # ── 기간별(1주·1개월·3개월) 예상 경로: 점수 10분위 × 추세 상태(60일선 위·추세 템플릿 6개 이상) 30칸별 실제 수익률 분포 ──
+    #    수익률은 '다음 날 시가 매수 → H일 뒤 종가'(절대 수익), 종목 변동성(60일) × √H 단위로 맞춰 종목마다 폭이 달라지게 한다.
+    FH, fhv = {}, {}
+    tr_all = ((F["d60"] > 0).astype(int) + (F["mm"] >= 6).astype(int)).values
+    for Hf in (5, 20, 60):
+        fw_ = (C.shift(-Hf) / O.shift(-1) - 1).values
+        dv, cv = V3.d.values, V3.c.values
+        m_ = dv + Hf < nd - 1
+        r_ = fw_[dv[m_], cv[m_]]
+        sgm = vol60.values[dv[m_], cv[m_]] * np.sqrt(Hf)
+        zf = r_ / sgm
+        b_ = (kk[m_] * 3 + tr_all[dv[m_], cv[m_]])
+        okf = np.isfinite(zf) & (np.abs(r_) < 3)
+        zf, b_, ddf = zf[okf], b_[okf], dv[m_][okf]
+        if len(zf) < 5000:
+            continue
+        lo_, hi_z = np.quantile(zf, [.01, .99])
+        def tab(mask):
+            out = np.zeros((30, 7))
+            for b in range(30):
+                mm_ = mask & (b_ == b)
+                if mm_.sum() < 300:                                  # 표본이 적으면 같은 점수 분위 전체로
+                    mm_ = mask & (b_ // 3 == b // 3)
+                z_ = zf[mm_]
+                out[b, :5] = np.quantile(z_, QS)
+                out[b, 5] = (z_ > 0).mean()
+                out[b, 6] = np.clip(z_, lo_, hi_z).mean()
+            return out
+        ud_ = np.unique(ddf)
+        cut_ = ud_[int(len(ud_) * 2 / 3)]
+        lt = ddf >= cut_
+        T1 = tab(~lt)
+        pu = T1[b_[lt], 5]
+        fhv[str(Hf)] = {"c80": round(float(((zf >= T1[b_, 0]) & (zf <= T1[b_, 4]))[lt].mean()) * 100, 1),
+                        "c50": round(float(((zf >= T1[b_, 1]) & (zf <= T1[b_, 3]))[lt].mean()) * 100, 1),
+                        "pHi": round(float((zf[lt][pu >= np.quantile(pu, .8)] > 0).mean()) * 100, 1),
+                        "pLo": round(float((zf[lt][pu <= np.quantile(pu, .2)] > 0).mean()) * 100, 1),
+                        "n": int(lt.sum()), "from": str(pd.Timestamp(dates[int(cut_)]).date())}
+        FH[Hf] = tab(np.ones(len(zf), bool))
+        v_ = fhv[str(Hf)]
+        log(f"    {Hf}일 예상 범위 검증: 80% 범위 적중 {v_['c80']}% · 오를 확률 상위 20%의 실제 상승 {v_['pHi']}% vs 하위 20% {v_['pLo']}%")
     log("    투자의견 검증(다음 1개월 시장 대비): " + " · ".join(f"{LV[int(k)]} {v[0]:+.2f}%p" for k, v in val.items()))
 
     # 주도섹터 검증: 매주 순위 상위 3 / 하위 3 섹터의 다음 1개월 시장 대비
@@ -322,8 +363,12 @@ def build(prices: dict, cap: dict, names: dict, krx: dict | None = None, log=pri
         if np.isfinite(v_):
             kq = min(int(p_ * 10), 9)
             out[code]["fc"] = [round(float(x * v_) * 100, 2) for x in QT[kq]] + [round(float(QM[kq] * v_) * 100, 2)]
+            tb = int(tr_all[t_last, c_]) if t_last < len(tr_all) else 0
+            out[code]["fh"] = {str(Hf): [round(float(x * v_ * np.sqrt(Hf)) * 100, 2) for x in T[kq * 3 + tb, :5]]
+                                        + [round(float(T[kq * 3 + tb, 5]) * 100, 1), round(float(T[kq * 3 + tb, 6] * v_ * np.sqrt(Hf)) * 100, 2)]
+                               for Hf, T in FH.items()}
     meta = {"asof": str(pd.Timestamp(dates[-1]).date()), "n": len(out), "oos": [str(pd.Timestamp(dates[starts[0]]).date()), str(pd.Timestamp(dates[-1]).date())],
-            "val": val, "fc": fcv, "monthly": monthly[-36:], "consist": round(consist * 100, 1) if consist is not None else None,
+            "val": val, "fc": fcv, "fh": fhv, "monthly": monthly[-36:], "consist": round(consist * 100, 1) if consist is not None else None,
             "dec": [round(float(v) * 100, 2) for v in dec.values], "tval": tval, "cut": CUT,
             "market": [[str(pd.Timestamp(d_).date()), round(float(v / mser.iloc[0]), 4)] for d_, v in mser.items()],
             "mret": {"r1d": float(midx.pct_change().iloc[-1]), "r1w": float(midx.pct_change(5).iloc[-1]),
