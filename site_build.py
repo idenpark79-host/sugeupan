@@ -706,7 +706,16 @@ def build_rec(rt: dict | None, lst, src, prices: dict, demo: bool):
         tr.to_csv(path, index=False)
     else:
         path.unlink(missing_ok=True)
-    dump("track.json", track.summary(tr))
+    out = track.summary(tr)
+    try:
+        kos = src.index("KOSPI", days=500)["Close"]
+    except Exception:
+        kos = None
+    try:
+        out["hist"] = track.history(tr, {**prices, **extra}, kos)
+    except Exception as e:
+        log("추천 이력 실패", e)
+    dump("track.json", out)
 
 
 def main():

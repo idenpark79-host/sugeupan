@@ -657,6 +657,8 @@ table.tbl thead th[aria-sort]{color:var(--accent)}
 .rrb .lab span{display:flex;flex-direction:column;gap:1px;white-space:normal;min-width:0}
 .rrb .lab span.c{text-align:center;align-items:center}.rrb .lab span.r{text-align:right;align-items:flex-end}
 .rrb .lab small{font-size:11px;color:var(--muted)}
+.hchart{display:block;width:100%;height:auto;max-height:300px}
+#hdates tr.on td{background:var(--sunk)}
 </style>
 
 <div class="app">
@@ -775,10 +777,10 @@ const ico = k => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${IC[k
 /* 메뉴 */
 const NAV = [
   ["국내증시", [["home", "시장 개요"], ["sector", "섹터·테마"], ["map", "업종 맵"], ["rank", "순위 분석"], ["flows", "투자자 동향"]]],
-  ["투자정보", [["op", "투자의견"], ["ai", "추천종목"], ["pat", "기술적 신호"], ["edu", "차트 공부"], ["screen", "조건검색"], ["cmp", "종목 비교"]]],
+  ["투자정보", [["op", "투자의견"], ["ai", "추천종목"], ["hist", "추천 이력"], ["pat", "기술적 신호"], ["edu", "차트 공부"], ["screen", "조건검색"], ["cmp", "종목 비교"]]],
   ["MY", [["watch", "관심종목"], ["pf", "보유종목"], ["set", "실시간 설정"]]]
 ];
-const ICON_OF = { sector: "sector", op: "op", home: "home", map: "map", rank: "rank", flows: "flows", ai: "ai", bt: "bt", pat: "pat", edu: "edu", screen: "screen", cmp: "cmp", watch: "watch", pf: "pf", set: "set" };
+const ICON_OF = { sector: "sector", op: "op", home: "home", map: "map", rank: "rank", flows: "flows", ai: "ai", hist: "bt", bt: "bt", pat: "pat", edu: "edu", screen: "screen", cmp: "cmp", watch: "watch", pf: "pf", set: "set" };
 const BRAND = `<a class="brand" href="#home" aria-label="Wake 홈"><svg class="mk" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="3" fill="var(--accent-2)"/><path d="M5 7.5l2.6 9 2.6-7 1.8 5 1.8-5 2.6 7 2.6-9" fill="none" stroke="#0F2547" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg><span class="wm">Wake</span><span class="sub">투자정보</span></a>`;
 const recH = h => S.rec?.ok ? S.rec.h?.[String(h)] : null;
 function badgeOf(r) {
@@ -1661,6 +1663,65 @@ function drawWarn(W) {
       <div class="pk-evd" data-stop hidden></div></article>`; }).join("");
   bindEv($("#apicks"), L);
 }
+
+/* ── 추천 이력: 날짜별 추천 종목의 이후 실제 주가 흐름 ── */
+function histChart(rows, kos, H) {
+  const W = innerWidth < 600 ? 360 : 640, Ht = innerWidth < 600 ? 230 : 220, pl = 8, pr = 46, pt = 10, pb = 22;
+  const paths = rows.map(r => r[10] || []).filter(p => p.length), n = Math.max(H, ...paths.map(p => p.length), (kos || []).length ? Math.min(kos.length, H) : 0);
+  if (!paths.length) return `<div class="empty">추천 다음 날부터의 시세가 아직 없습니다.</div>`;
+  const avg = Array.from({ length: Math.max(...paths.map(p => p.length)) }, (_, i) => { const v = paths.map(p => p[i]).filter(x => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; });
+  const K = (kos || []).slice(0, n), all = [...paths.flat(), ...K, 0];
+  const lo = Math.min(...all), hi = Math.max(...all), pad = (hi - lo) * .08 || 1, y0 = lo - pad, y1 = hi + pad;
+  const X = i => pl + (i + 1) / n * (W - pl - pr), Y = v => pt + (y1 - v) / (y1 - y0) * (Ht - pt - pb);
+  const line = (a, st) => `<polyline points="${[`${pl},${Y(0)}`, ...a.map((v, i) => v == null ? "" : `${X(i).toFixed(1)},${Y(v).toFixed(1)}`)].filter(Boolean).join(" ")}" fill="none" ${st}/>`;
+  const ticks = [y0, 0, y1].map(v => Math.round(v));
+  return `<svg viewBox="0 0 ${W} ${Ht}" class="hchart" role="img" aria-label="추천 이후 수익률 흐름">
+    ${[...new Set([...ticks, ...[-20, -10, 10, 20, 30, 40].filter(v => v > y0 && v < y1)])].map(v => `<line x1="${pl}" x2="${W - pr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" ${v === 0 ? "" : `stroke-dasharray="2 3"`}/><text x="${W - pr + 6}" y="${Y(v) + 4}" font-size="11" fill="var(--muted)">${v > 0 ? "+" : ""}${v}%</text>`).join("")}
+    <line x1="${X(H - 1)}" x2="${X(H - 1)}" y1="${pt}" y2="${Ht - pb}" stroke="var(--line-strong)" stroke-dasharray="3 3"/><text x="${X(H - 1)}" y="${Ht - 6}" font-size="11" text-anchor="middle" fill="var(--muted)">보유 기간 끝</text>
+    ${paths.map(p => line(p, `stroke="var(--ink-2)" stroke-opacity=".28" stroke-width="1"`)).join("")}
+    ${K.length ? line(K, `stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="5 3"`) : ""}
+    ${line(avg, `stroke="var(--accent)" stroke-width="2.4"`)}
+    <text x="${pl}" y="${Ht - 6}" font-size="11" fill="var(--muted)">추천일</text></svg>`;
+}
+const HSTAT = r => { const [, , H, , , tg, sp, stt, , ex, path] = r;
+  if (stt === "open") return `<span class="lbl">진행 중 · ${path.length}일째</span>`;
+  const last = r[13]; return stt === "win" ? (r[8] != null && path.length && Math.max(...path) >= (tg / r[4] - 1) * 100 - .01 ? `<span class="up">목표 도달</span>` : `<span class="up">수익 마감</span>`) : `<span class="down">${(Math.min(...path) <= (sp / r[4] - 1) * 100 + .01) ? "손절" : "손실 마감"}</span>`; };
+VIEWS.hist = function () {
+  const T = S.track?.hist;
+  if (!T?.dates?.length) { page(`<div class="ph"><div><h1>추천 이력</h1></div></div><div class="card empty">아직 기록된 추천이 없습니다.</div>`); return; }
+  st.hH ||= 20;
+  const v = page(`<div class="ph"><div><h1>추천 이력</h1><p>날짜별로 추천했던 종목이 그 뒤 실제로 어떻게 움직였는지 보여줍니다. 수익률은 추천일 종가 기준입니다.</p></div>
+      <div class="controls">${seg("hh", [[5, "단기 1주"], [20, "스윙 1개월"], [60, "중장기 3개월"]], st.hH)}</div></div>
+    <section class="card"><div class="card-h"><h2>날짜별 성과</h2><span class="lbl">날짜를 누르면 종목별로 볼 수 있어요</span></div><div class="card-b flush"><div class="scroll" id="hdates"></div></div></section>
+    <section class="card mt" id="hday"></section>`);
+  const rowsOf = (d, H) => (T.rows[d] || []).filter(r => r[2] === H);
+  const lastPct = r => r[10]?.length ? r[10][Math.min(r[10].length, r[2]) - 1] : null;
+  const drawDates = () => {
+    const H = +st.hH, D = T.dates.filter(d => rowsOf(d, H).length);
+    if (!D.includes(st.hD)) st.hD = D[0];
+    $("#hdates").innerHTML = `<table class="tbl"><thead><tr><th class="l">추천일</th><th class="hide-m">종목 수</th><th>평균 수익률</th><th>오른 종목</th><th>코스피</th><th>경과</th></tr></thead><tbody>${D.map(d => {
+      const R = rowsOf(d, H), v_ = R.map(lastPct).filter(x => x != null), av = v_.length ? v_.reduce((a, b) => a + b, 0) / v_.length : null;
+      const kp = T.kospi?.[d], kd = kp?.length ? kp[Math.min(kp.length, H) - 1] : null, el = Math.max(0, ...R.map(r => r[10]?.length || 0));
+      return `<tr data-hd="${d}" class="${d === st.hD ? "on" : ""}" style="cursor:pointer"><td class="l"><b>${dt(d)}</b></td><td class="num hide-m">${R.length}</td><td class="num ${cls(av)}"><b>${av == null ? "-" : pct(av, 1)}</b></td><td class="num">${v_.filter(x => x > 0).length}/${v_.length}</td><td class="num ${cls(kd)}">${kd == null ? "-" : pct(kd, 1)}</td><td class="num">${Math.min(el, H)}/${H}일</td></tr>`; }).join("")}</tbody></table>`;
+    $$("[data-hd]", v).forEach(tr => tr.onclick = () => { st.hD = tr.dataset.hd; drawDates(); });
+    drawDay();
+  };
+  const drawDay = () => {
+    const H = +st.hH, d = st.hD, R = rowsOf(d, H);
+    if (!R.length) { $("#hday").innerHTML = ""; return; }
+    const kp = T.kospi?.[d];
+    $("#hday").innerHTML = `<div class="card-h"><h2>${dt(d)} ${HZL(H)} 추천 <small>${R.length}종목</small></h2></div>
+      <div class="card-b">${histChart(R, kp, H)}<div class="clg" style="margin-top:6px"><span><i style="background:var(--accent)"></i>추천 종목 평균</span><span><i style="background:var(--ink-2);opacity:.4"></i>종목별</span>${kp ? `<span><i style="background:var(--muted)"></i>코스피(점선)</span>` : ""}</div></div>
+      <div class="card-b flush"><div class="scroll"><table class="tbl"><thead><tr><th class="l">종목</th><th class="hide-m">추천가</th><th class="hide-m">현재·마감</th><th>추천가 대비</th><th>기간 중 최고</th><th>기간 중 최저</th><th class="hide-m">규칙대로 매매</th><th class="l">결과</th></tr></thead><tbody>
+      ${R.map(r => { const lp = lastPct(r); return `<tr data-go="${r[0]}"><td class="l"><b>${esc(r[1])}</b><div class="lbl">${r[3]}위</div></td><td class="num hide-m">${n(r[4])}</td><td class="num hide-m">${r[13] != null ? n(r[4] * (1 + (lp ?? 0) / 100)) : "-"}</td>
+        <td class="num ${cls(lp)}"><b>${lp == null ? "-" : pct(lp, 1)}</b></td><td class="num up">${r[11] == null ? "-" : pct(r[11], 1)}</td><td class="num down">${r[12] == null ? "-" : pct(r[12], 1)}</td>
+        <td class="num hide-m ${cls(r[8])}">${r[8] == null ? "-" : pct(r[8], 1)}</td><td class="l">${HSTAT(r)}</td></tr>`; }).join("")}</tbody></table></div>
+      <p class="note" style="padding:10px 16px 14px">추천가 대비는 추천일 종가에서 보유 기간 끝(진행 중이면 오늘)까지의 변화입니다. 규칙대로 매매는 다음 날 시가에 사서 목표가·손절가·기간 만료 중 먼저 오는 때 판 결과(거래비용 0.25% 차감)입니다.</p></div>`;
+    bindGo($("#hday"));
+  };
+  onSeg(v, "hh", x => { st.hH = +x; drawDates(); });
+  drawDates();
+};
 VIEWS.bt = function () {
   const B = S.bt;
   if (!B?.ok) { page(`<div class="ph"><div><h1>전략 검증</h1></div></div><div class="card empty">전략 검증 결과가 아직 없습니다. 다음 정기 갱신 후 표시됩니다.</div>`); return; }

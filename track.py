@@ -107,3 +107,34 @@ def _summary(tr: pd.DataFrame) -> dict:
 
 def summary(tr: pd.DataFrame) -> dict:
     return {"h": {str(h): _summary(tr[tr.h == h]) for h in (5, 20, 60)}}
+
+
+def history(tr: pd.DataFrame, prices: dict, kospi: pd.Series | None = None, days: int = 120) -> dict:
+    """추천 날짜별: 추천 종목이 이후 실제로 어떻게 움직였는지(추천일 종가 대비 매일 종가 %), 같은 기간 코스피."""
+    if not len(tr):
+        return {"dates": [], "rows": {}, "kospi": {}}
+    dates = sorted(tr.date.unique(), reverse=True)[:days]
+    out, kp = {}, {}
+    for d in dates:
+        rows = []
+        for r in tr[tr.date == d].sort_values(["h", "rank"]).itertuples():
+            df = prices.get(r.code)
+            path, hi, lo, now = [], None, None, None
+            if df is not None and len(df):
+                after = df[df.index > pd.Timestamp(d)].iloc[:max(int(r.h), 60)]
+                if len(after):
+                    path = [round((float(c) / float(r.ref) - 1) * 100, 2) for c in after.Close]
+                    hi = round((float(after.High.iloc[:int(r.h)].max()) / float(r.ref) - 1) * 100, 2)
+                    lo = round((float(after.Low.iloc[:int(r.h)].min()) / float(r.ref) - 1) * 100, 2)
+                    now = float(after.Close.iloc[-1])
+            rows.append([r.code, r.name, int(r.h), int(r.rank), float(r.ref), float(r.target), float(r.stop), r.status,
+                         None if pd.isna(r.ret) else round(float(r.ret) * 100, 2), None if pd.isna(r.exit_date) else r.exit_date,
+                         path, hi, lo, now])
+        out[d] = rows
+        if kospi is not None and len(kospi):
+            k = kospi[kospi.index > pd.Timestamp(d)].iloc[:60]
+            base = kospi[kospi.index <= pd.Timestamp(d)]
+            if len(k) and len(base):
+                kp[d] = [round((float(v) / float(base.iloc[-1]) - 1) * 100, 2) for v in k]
+    return {"dates": dates, "rows": out, "kospi": kp,
+            "cols": ["code", "name", "h", "rank", "ref", "target", "stop", "status", "ret", "exit", "path", "hi", "lo", "now"]}
