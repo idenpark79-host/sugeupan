@@ -603,7 +603,7 @@ def build_themes(rt: dict | None, lst: pd.DataFrame, metrics: dict):
     try:
         (ROOT / "track").mkdir(exist_ok=True)
         (ROOT / "track" / "model.json").write_text(json.dumps({"asof": m.get("asof"), "fund": FUND_DIAG, "val": m.get("val"), "fh": m.get("fh"), "value": m.get("value"),
-            "picks": {h: x.get("segs", {}) for h, x in (rt.get("picks") or {}).items() if h != "warn"}}, ensure_ascii=False, indent=1), encoding="utf-8")
+            "market": (rt.get("picks") or {}).get("market"), "picks": {h: x.get("segs", {}) for h, x in (rt.get("picks") or {}).items() if h not in ("warn", "market")}}, ensure_ascii=False, indent=1), encoding="utf-8")
     except Exception as e:
         log("모델 기록 실패", e)
 
@@ -675,7 +675,8 @@ def build_rec(rt: dict | None, lst, src, prices: dict, demo: bool):
         dump("track.json", {"h": {}})
         return
     names = dict(zip(lst.Code, lst.Name))
-    pk = {k: v for k, v in pk.items() if k != "warn"}
+    mkt = pk.get("market")
+    pk = {k: v for k, v in pk.items() if k not in ("warn", "market")}
     wn = rt["picks"].get("warn")
     for h in pk.values():
         for p in h["picks"]:
@@ -684,7 +685,7 @@ def build_rec(rt: dict | None, lst, src, prices: dict, demo: bool):
     for p in (wn or {}).get("list", []):
         p["name"] = names.get(p["code"], p["name"])
         p["close"] = r2(p["close"])
-    dump("rec.json", {"ok": True, "asof": rt["meta"]["asof"], "h": pk, "warn": wn})
+    dump("rec.json", {"ok": True, "asof": rt["meta"]["asof"], "h": pk, "warn": wn, "market": mkt})
     day = pd.Timestamp(src.day).strftime("%Y-%m-%d")
     path = (OUT / "_track_demo.csv") if (demo or src.sample_flow) else (ROOT / "track" / "picks.csv")
     tr = track.load(path)
@@ -700,7 +701,8 @@ def build_rec(rt: dict | None, lst, src, prices: dict, demo: bool):
                 pass
     tr = track.update(tr, {**prices, **extra})
     for h in pk.values():
-        tr = track.add_today(tr, day, h["picks"], h=h["H"], n=10)
+        if not h.get("wait"):                  # 시장 신호등이 꺼진 날은 추천하지 않으므로 기록도 하지 않음
+            tr = track.add_today(tr, day, h["picks"], h=h["H"], n=20)
     if not (demo or src.sample_flow):
         path.parent.mkdir(exist_ok=True)
         tr.to_csv(path, index=False)
@@ -804,7 +806,7 @@ def main():
     detail = lst[lst.Marcap >= SITE["chart_min_marcap"]].sort_values("Marcap", ascending=False).Code.tolist()
     if args.max_detail:
         keep = (set(detail[:args.max_detail]) | set(DEMO_REAL)
-                | {p["code"] for k, h in ((rt or {}).get("picks") or {}).items() for p in (h.get("list", []) if k == "warn" else h["picks"])})
+                | {p["code"] for k, h in ((rt or {}).get("picks") or {}).items() if k != "market" for p in (h.get("list", []) if k == "warn" else h["picks"])})
         detail = [c for c in detail if c in keep]
     flowset = set(lst[lst.Marcap >= SITE["flow_min_marcap"]].Code)
     if not (OUT / "investors.json").exists():

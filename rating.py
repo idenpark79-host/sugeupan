@@ -55,6 +55,9 @@ def _index(ret: pd.DataFrame, w: pd.DataFrame, cols) -> pd.Series:
     return (num / den.replace(0, np.nan)).fillna(0)
 
 
+OOS_DAYS = None   # 연구용: 검증 기간(거래일) 늘리기
+
+
 def build(prices: dict, cap: dict, names: dict, krx: dict | None = None, log=print, min_amt=3e8, flows: dict | None = None, fund: dict | None = None):
     codes = [c for c in prices if c in cap]
     W = _wide(prices, codes)
@@ -181,7 +184,7 @@ def build(prices: dict, cap: dict, names: dict, krx: dict | None = None, log=pri
     yc = np.clip(y, lo, hi_)
     rng = np.random.default_rng(0)
     nd = len(dates)
-    oos_days = min(756, int(nd * 0.45))
+    oos_days = OOS_DAYS or min(756, int(nd * 0.45))
     fold = 126
     starts = list(range(nd - oos_days, nd, fold))
     pred = np.full(len(ri), np.nan)

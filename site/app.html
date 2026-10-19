@@ -659,6 +659,9 @@ table.tbl thead th[aria-sort]{color:var(--accent)}
 .rrb .lab small{font-size:11px;color:var(--muted)}
 .hchart{display:block;width:100%;height:auto;max-height:300px}
 #hdates tr.on td{background:var(--sunk)}
+.lamp{margin-bottom:14px}.lamp.off{border-top:2px solid var(--muted)}.lamp.on{border-top:2px solid var(--accent)}
+details.wait>summary{padding:14px 16px;cursor:pointer;font-weight:600;list-style:none;display:flex;align-items:baseline;gap:6px}details.wait>summary::-webkit-details-marker{display:none}details.wait>summary::after{content:"펼치기";margin-left:auto;font-weight:500;font-size:12.5px;color:var(--accent)}details.wait[open]>summary::after{content:"접기"}details.wait>summary{flex-wrap:wrap}details.wait>summary small{font-weight:400;color:var(--muted);flex-basis:100%;order:3;font-size:12.5px}details.wait>summary::after{white-space:nowrap}
+details.wait .pk-grid{padding:0 16px 16px}
 </style>
 
 <div class="app">
@@ -784,7 +787,7 @@ const ICON_OF = { sector: "sector", op: "op", home: "home", map: "map", rank: "r
 const BRAND = `<a class="brand" href="#home" aria-label="Wake 홈"><svg class="mk" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="3" fill="var(--accent-2)"/><path d="M5 7.5l2.6 9 2.6-7 1.8 5 1.8-5 2.6 7 2.6-9" fill="none" stroke="#0F2547" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg><span class="wm">Wake</span><span class="sub">투자정보</span></a>`;
 const recH = h => S.rec?.ok ? S.rec.h?.[String(h)] : null;
 function badgeOf(r) {
-  if (r === "ai" && recH(20)?.picks?.length) return recH(20).picks.length;
+  if (r === "ai" && recH(20)?.picks?.length && !recH(20).wait) return recH(20).picks.length;
   if (r === "watch") { const k = alertHits().length; return k ? k : null; }
   if (r === "cmp") { const k = store.get("cmp", []).length; return k || null; }
   return null;
@@ -1307,6 +1310,7 @@ function briefing() {
   return L.map(([k, t]) => `<div class="r"><span class="k">${k}</span><p>${t}</p></div>`).join("");
 }
 function homePicks(P, H) {
+  if (recH(H)?.wait) return `<div class="card-b"><p style="margin:0 0 6px"><b>시장 신호등이 꺼져 신규 매수를 쉬는 구간입니다.</b></p><p class="note" style="margin:0">${(S.rec?.market?.lamps || []).filter(l => !l[1]).map(l => esc(l[0].replace(/ \(.*\)$/, ""))).join(" · ")} 조건이 맞지 않습니다. <a href="#ai">자세히 보기</a></p></div>`;
   if (!P.length) return `<div class="empty">오늘은 조건을 만족하는 종목이 없습니다.</div>`;
   const V = recH(H)?.val;
   P = P.slice().sort((a, b) => b.score - a.score);
@@ -1556,6 +1560,13 @@ const GRADE_TOP = { S: 2, A: 5, B: 10 };
 const OPN = { S: "Strong Buy", A: "Buy", B: "Trading Buy", C: "Trading Buy" };
 const opBadge = g => `<span class="op ${g}" title="퀀트 스코어 상위 ${GRADE_TOP[g] ?? 20}%">${OPN[g] || g}</span>`;
 
+/* 시장 신호등 — 모두 충족할 때만 신규 매수 추천 */
+function mLamp() {
+  const M = S.rec?.market; if (!M) return "";
+  return `<section class="card lamp ${M.on ? "on" : "off"}"><div class="card-h"><h2>시장 신호등 <small>${M.on ? "신규 매수 가능" : "관망 — 신규 매수 쉬기"} · ${dt(M.since)}부터</small></h2></div>
+    <div class="card-b flush"><table class="tbl"><tbody>${M.lamps.map(([t, ok, x]) => `<tr><td class="l" style="white-space:normal">${esc(t)}</td><td class="num lbl">${esc(x)}</td><td class="num" style="width:64px"><b class="${ok ? "okc" : "noc"}">${ok ? "충족" : "미충족"}</b></td></tr>`).join("")}</tbody></table>
+    <p class="note" style="padding:10px 16px 14px">${M.on ? "네 가지가 모두 맞아 추천을 내고 있어요." : "하나라도 맞지 않으면 시장 전체가 흔들리는 구간이라, 좋은 종목도 같이 빠지는 경우가 많아 신규 매수 추천을 쉽니다."} 2019~2026년 검증에서 신호등이 켜진 날의 추천은 꺼진 날보다 평균 수익과 오른 비율이 모두 높았습니다(끝까지 보유 기준 — 스윙 중소형주 1개월 평균 +4.2%·오른 비율 49% 대 +1.8%·43%, 중장기 대형주 3개월 +7.2%·52% 대 +4.0%·47%). 지난 3년 중 켜진 날은 ${p1(M.share)}%입니다.</p></div></section>`;
+}
 /* 미니 차트: 최근 60일 종가 + 오른쪽에 목표가·손절가 구간 */
 function wakeSvg(closes, price, target, stop, H, w) {
   const h = 84, pt = 14, pb = 14, past = closes.slice(-60), xn = Math.round(w * 0.7);
@@ -1638,14 +1649,15 @@ function pickCard(p) {
 }
 VIEWS.ai = function () {
   if (!S.rec?.ok) { page(`<div class="ph"><div><h1>추천종목</h1></div></div><div class="card empty">추천종목 산출 결과가 아직 없습니다.</div>`); return; }
-  const hs = [5, 20, 60].filter(h => recH(h)), W = S.rec.warn;
-  const tabs = [...hs.map(h => [h, `${HZL(h)} ${HZP(h)}`]), ...([])];
+  const hs = [20, 60].filter(h => recH(h)), W = S.rec.warn;
+  const tabs = hs.map(h => [h, `${HZL(h)} ${HZP(h)}`]);
   if (!tabs.some(t => String(t[0]) === String(st.aiH))) st.aiH = hs.includes(20) ? 20 : hs[0];
   st.aiZ ||= "L";
   const v = page(`<div class="ph"><div><h1>추천종목</h1><p>${dt(S.rec.asof || S.meta.asof)} 종가 기준 · 투자의견 매수 이상 종목 중 점수 상위</p></div>
       <div class="controls">${seg("aih", tabs, st.aiH)}<span id="aizw">${seg("aiz", [["L", "대형주"], ["S", "중소형주"]], st.aiZ)}</span></div></div>
+    ${mLamp()}
     <section id="aival" hidden></section>
-    <div class="pk-grid" id="apicks"></div>
+    <div id="apicks"></div>
     <p class="note mt">과거 성적은 학습에 쓰지 않은 기간에 같은 규칙으로 매일 고른 종목을 다음 날 시가에 사서, 목표가·손절가·보유 기간 만료 중 먼저 오는 때 판 결과입니다(거래비용 0.25% 차감). 대형주는 시가총액 1조 원 이상입니다. 과거 성적이 미래 수익을 보장하지 않습니다.</p>`);
   const draw = () => {
     $("#aizw").hidden = st.aiH === "w";
@@ -1658,7 +1670,12 @@ VIEWS.ai = function () {
       <p class="note" style="margin-top:10px">${V.ew > 0.1 && V.avg >= V.ew * 1.5 ? `추천 종목은 같은 기간 같은 규모 일반 종목 평균의 ${n(V.avg / V.ew, 1)}배를 벌었습니다. ` : ""}${V.avg < V.mkt ? `대형주가 이끈 시장 지수(${pct(V.mkt)})보다는 낮았습니다. ` : `시장 지수(${pct(V.mkt)})보다도 높았습니다. `}수익 종목의 상승폭이 손실 종목의 하락폭보다 커서 평균이 플러스가 되는 구조라, 여러 종목에 나눠 담는 것이 과거 성적에 가깝습니다.</p>
 </div>`;
     if (false) $("#aival").insertAdjacentHTML("beforeend", `<p class="warnbox">${HZL(H)} ${SZ[Z]} 추천은 과거 검증에서 같은 규모 일반 종목 평균과 차이가 크지 않았습니다. 참고용으로 보세요.</p>`);
-    $("#apicks").innerHTML = P.map(p => pickCard(p)).join("") || `<div class="card empty">오늘은 조건을 만족하는 종목이 없습니다.</div>`;
+    const cards = `<div class="pk-grid">${P.map(p => pickCard(p)).join("")}</div>`;
+    if (R.wait) {
+      const O = V.off;
+      $("#apicks").innerHTML = `<details class="card mt wait"><summary>시장이 회복되면 볼 후보 <small>${P.length}종목 · 지금은 매수 추천이 아닙니다</small></summary>
+        ${O ? `<p class="note" style="padding:0 16px">과거 신호등이 꺼진 날 같은 방법으로 골랐다면 ${HZP(H)} 평균 ${pct(O.avg)}, 오른 비율 ${p1(O.win)}%였습니다(${SZ[Z]}, 끝까지 보유 기준).</p>` : ""}${cards}</details>`;
+    } else $("#apicks").innerHTML = P.length ? cards : `<div class="card empty">오늘은 조건을 만족하는 종목이 없습니다.</div>`;
     bindEv($("#apicks"), P); rtBind($("#apicks"));
   };
   onSeg(v, "aih", x => { st.aiH = x === "w" ? "w" : +x; draw(); });
@@ -2963,7 +2980,7 @@ async function vStock(code) {
       <div class="controls"><button class="btn ${inW ? "" : "pri"}" id="wbtn" type="button">${inW ? "관심종목 해제" : "관심종목 추가"}</button><button class="btn" id="cbtn" type="button">비교 추가</button><button class="btn" id="lbtn" type="button">링크 복사</button>
         <a class="btn" href="https://finance.naver.com/item/news.naver?code=${code}" target="_blank" rel="noopener">뉴스</a>
         <a class="btn" href="https://finance.naver.com/item/main.naver?code=${code}" target="_blank" rel="noopener">공시·재무</a></div></section>
-    ${PKS.length ? `<section class="pickbox mt" data-pc="${code}" data-ph="${PKS[0].H}"><div class="pb-h">${opTag(s.op)}<b>${PKS.map(p => `${HZL(p.H)} ${SZ[p.size] || ""} ${p.rank}위`).join(" · ")}</b><span class="lbl">추천종목 · ${dt(S.meta.asof)} 선정</span></div>
+    ${PKS.length ? `<section class="pickbox mt" data-pc="${code}" data-ph="${PKS[0].H}"><div class="pb-h">${opTag(s.op)}<b>${PKS.map(p => `${HZL(p.H)} ${SZ[p.size] || ""} ${p.rank}위`).join(" · ")}</b><span class="lbl">${recH(PKS[0].H)?.wait ? "시장 회복 시 후보 · 지금은 관망(신규 매수 쉬기)" : `추천종목 · ${dt(S.meta.asof)} 선정`}</span></div>
       ${PKS.length > 1 ? `<div class="scroll"><table class="tbl"><thead><tr><th class="l">보유 기간</th><th>손절가</th><th>1차 목표</th><th>2차 목표</th></tr></thead><tbody>${PKS.map(p => `<tr><td class="l">${HZL(p.H)}<div class="lbl">${HZP(p.H)}</div></td><td class="num down">${n(p.stop)}<div class="lbl">${pct(p.stpPct, 1)}</div></td><td class="num up">${p.t1 ? n(p.t1) : "-"}<div class="lbl">${p.t1 ? pct(p.t1Pct, 1) : ""}</div></td><td class="num up">${n(p.target)}<div class="lbl">${pct(p.tgtPct, 1)}</div></td></tr>`).join("")}</tbody></table></div>${pickBody({ ...PKS[0], stop: null }, true).replace(/^\s*<div class="rrb">[\s\S]*?<\/div><\/div>/, "")}` : pickBody(PKS[0])}</section>` : ""}
     <section class="card mt"><div class="card-h"><h2>핵심 요약 <small>${dt(S.meta.asof)} 종가 기준</small></h2></div><div class="card-b"><div class="ksum" id="ksum"><p class="note">불러오는 중</p></div></div></section>
     ${card("차트", `<div class="controls">${seg("tf", [["d", "일봉"], ["w", "주봉"], ["m", "월봉"]], st.tf || "d")}<span id="spw"></span><button class="btn sm" id="indbtn" type="button" aria-expanded="false">보조지표</button></div>`, `<div class="ovl" id="ovl"></div><div class="fcsel" id="fcsel"></div><div class="ind" id="ind" hidden></div><div class="clg" id="clg"></div><div id="panes"></div>`, "mt")}

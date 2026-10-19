@@ -27,6 +27,31 @@ MIN_OP = 0.75            # 투자의견 매수 이상
 FLOW_G = {"frg": "외국인", "inst": "기관", "pen": "연기금", "trust": "투신", "pef": "사모"}
 
 
+HORIZONS = (20, 60)          # 단기(1주)는 2019~2026 검증에서 시장 대비 우위가 없어(승률 45%) 추천에서 뺐다
+VOLQ = {20: {"L": None, "S": None}, 60: {"L": None, "S": None}}   # 변동성 제한: 2019~2022엔 승률을 올렸지만 2023년 이후엔 오히려 나빠 쓰지 않음
+
+
+def regime(c):
+    """시장 신호등 — 세 가지가 모두 맞을 때만 신규 매수 추천.
+    ① 시장 지수(전 종목 시가총액 가중)가 60일·20일 이동평균선 위  ② 20일선 위 종목 비율 40% 이상  ③ 지수 변동성이 최근 1년 중 상위 15%가 아님
+    검증(2019~2026, 7.7년): 조건이 모두 맞은 날의 추천은 스윙 중소형주 1개월 평균 +4.2%(승률 49%), 중장기 중소형주 3개월 +13.2%(54%).
+    맞지 않은 날의 같은 추천은 1개월 +1.9%(44%), 3개월 +8.2%(45%) — 하락장에서는 신규 매수를 쉬는 것이 낫다."""
+    mi = pd.Series(np.asarray(c["midx"].values, float))
+    C = c["C"]
+    br = pd.Series(np.nanmean((C > C.rolling(20).mean()).values.astype(float), axis=1))
+    rv = mi.pct_change().rolling(20).std() * np.sqrt(252)
+    rvp = rv.rolling(250, min_periods=120).rank(pct=True)
+    a60, a20 = mi > mi.rolling(60).mean(), mi > mi.rolling(20).mean()
+    R = pd.DataFrame({"a60": a60.values, "a20": a20.values, "br": br.values, "rvp": rvp.values, "mi": mi.values,
+                      "ma60": mi.rolling(60).mean().values, "ma20": mi.rolling(20).mean().values})
+    R["on"] = R.a60 & R.a20 & (R.br >= 0.4) & (R.rvp < 0.85)
+    return R
+
+
+RULE = {20: "시장 신호등이 켜진 날만 · 투자의견 매수 이상 + 20·60일선 위 종목 중 점수 순 (낙폭과대 반등형 제외, 업종당 3종목)",
+        60: "시장 신호등이 켜진 날만 · 투자의견 매수 이상 + 추세 템플릿 7개 이상 종목 중 점수 순 (업종당 3종목)"}
+
+
 def _trend_ok(F):
     """추세 확인: 주가가 20일·60일 이동평균선 위 + 낙폭과대(3개월 −15% 이하 또는 1개월 −8% 이하) 반등 기대 종목 제외.
     검증: 떨어지는 칼날을 잡는 반등형 종목을 빼도 평균 수익은 비슷하거나 높았고(중장기 대형주는 시장 대비 −0.2%p → +2%p대), 근거가 기술적 추세로 일관된다."""
@@ -36,7 +61,7 @@ def _trend_ok(F):
 STYLE = {5: lambda F: (_trend_ok(F) & (F["amtr"] >= 1.5).values).astype("float32"),
          20: lambda F: _trend_ok(F).astype("float32"),
          60: lambda F: (_trend_ok(F) & (F["mm"] >= 7).values).astype("float32")}
-RULE = {5: "투자의견 매수 이상 + 20·60일선 위 + 최근 5일 거래대금이 3개월 평균의 1.5배 이상인 종목 중 점수 순 (낙폭과대 반등형 제외)",
+RULE_OLD = {5: "투자의견 매수 이상 + 20·60일선 위 + 최근 5일 거래대금이 3개월 평균의 1.5배 이상인 종목 중 점수 순 (낙폭과대 반등형 제외)",
         20: "투자의견 매수 이상 + 20·60일선 위(상승 추세 확인) 종목 중 점수 순 (낙폭과대 반등형 제외)",
         60: "투자의견 매수 이상 + 추세 템플릿 8조건 중 7개 이상(장기 정배열) 종목 중 점수 순 (낙폭과대 반등형 제외)"}
 
@@ -132,7 +157,7 @@ def _sim_half(A, d, cc, Hh, risk, t1):
     return out - COST
 
 
-LV_MA, LV_DMIN, LV_DMAX, LV_T2, LV_FAR = False, 0.5, 1.3, 1.5, 1.6   # 검증: 이평선보다 실제 저점이 손절 근거로 나았고, 너무 가까운 저항을 2차 목표로 쓰면 수익이 줄었다
+LV_MA, LV_DMIN, LV_DMAX, LV_T2, LV_FAR = False, 0.8, 1.5, 1.5, 1.6   # 검증: 이평선보다 실제 저점이 손절 근거로 나았고, 너무 가까운 저항을 2차 목표로 쓰면 수익이 줄었다
 LOOK = {5: 60, 20: 120, 60: 250}      # 지지·저항을 찾는 기간(봉)
 PIVK = {5: 3, 20: 5, 60: 8}           # 고점·저점: 앞뒤 k봉 중 가장 높은(낮은) 봉
 
@@ -274,7 +299,20 @@ def build(c: dict, log=print) -> dict:
     op_today = pd.Series(c["pct_today"], index=c["c_today"])
     t_last = nd - 1
     out = {}
-    for Hh in (5, 20, 60):
+    R = regime(c)
+    gate = R.on.values
+    kv = F["k_vol20"].values
+    gl = R.iloc[t_last]
+    on_since = t_last
+    while on_since > 0 and gate[on_since - 1] == gate[t_last]:
+        on_since -= 1
+    out["market"] = {"on": bool(gl.on), "since": str(pd.Timestamp(dates[on_since]).date()),
+                     "lamps": [["시장 지수가 60일 이동평균선 위 (중기 추세 상승)", bool(gl.a60), f"60일선 대비 {(gl.mi / gl.ma60 - 1) * 100:+.1f}%"],
+                               ["시장 지수가 20일 이동평균선 위 (단기 추세 상승)", bool(gl.a20), f"20일선 대비 {(gl.mi / gl.ma20 - 1) * 100:+.1f}%"],
+                               ["20일선 위에 있는 종목이 40% 이상 (상승 종목이 고르게 많음)", bool(gl.br >= 0.4), f"현재 {gl.br * 100:.0f}%"],
+                               ["시장 변동성이 평소 수준 (최근 1년 중 상위 15%가 아님)", bool(gl.rvp < 0.85), (f"최근 1년 중 낮은 편 (하위 {gl.rvp * 100:.0f}%)" if gl.rvp < 0.5 else f"최근 1년 중 높은 편 (상위 {max(1, 100 - gl.rvp * 100):.0f}%)")]],
+                     "share": round(float(np.nanmean(gate[oos0:])) * 100, 1)}
+    for Hh in HORIZONS:
         flt = STYLE[Hh](F)
         fw = A[3][Hh + 1:] / A[0][1:-Hh] - 1
         fmax = Hh_.iloc[::-1].rolling(Hh, min_periods=1).max().iloc[::-1].shift(-1).values      # 다음 날~H일 뒤 최고가
@@ -287,11 +325,22 @@ def build(c: dict, log=print) -> dict:
         if flt is not None:
             Q0 = Q0[np.nan_to_num(flt[Q0.d.values, Q0.c.values]) > 0]
         Q0 = Q0[amt60[Q0.d.values, Q0.c.values] >= MIN_AMT]
-        res = {"H": Hh, "label": HZ[Hh][0], "hold": HZ[Hh][1], "rule": RULE[Hh], "picks": [], "segs": {}}
+        Q_all = Q0
+        Q0 = Q0[gate[Q0.d.values]]
+        res = {"H": Hh, "wait": not bool(gl.on), "label": HZ[Hh][0], "hold": HZ[Hh][1], "rule": RULE[Hh], "picks": [], "segs": {}}
         allV = []
         for sg, (sname, sdesc) in SEG.items():
+            vq = VOLQ[Hh][sg]
+            vok = (lambda Q_: kv[Q_.d.values, Q_.c.values] < vq) if vq else (lambda Q_: np.ones(len(Q_), bool))
             inseg = big[Q0.d.values, Q0.c.values] if sg == "L" else ~big[Q0.d.values, Q0.c.values]
-            Q = Q0[inseg].sort_values(["d", "pct"], ascending=[True, False])
+            Q = Q0[inseg]
+            Q = Q[vok(Q)].sort_values(["d", "pct"], ascending=[True, False])
+            # 신호등이 꺼진 날 같은 방법으로 골랐다면 (비교용, 단순 보유)
+            Qo = Q_all[~gate[Q_all.d.values]]
+            Qo = Qo[(big[Qo.d.values, Qo.c.values] if sg == "L" else ~big[Qo.d.values, Qo.c.values])]
+            Qo = Qo[vok(Qo)].sort_values(["d", "pct"], ascending=[True, False]).groupby("d").head(TOPN)
+            fo = A[3][Qo.d.values + Hh, Qo.c.values] / A[0][Qo.d.values + 1, Qo.c.values] - 1 - COST
+            fo = fo[np.isfinite(fo)]
             tq = thc[Q.c.values]
             Q = Q[(Q.assign(th_=tq).groupby(["d", "th_"]).cumcount().values < PER_THEME) | (tq == "기타")].groupby("d").head(TOPN)
             d, cc = Q.d.values.astype(int), Q.c.values.astype(int)
@@ -315,14 +364,17 @@ def build(c: dict, log=print) -> dict:
             allV.append(V)
             val = _val(V, dates) if len(V) else {}
             val["name"], val["desc"] = sname, sdesc
+            if len(fo):
+                val["off"] = {"avg": round(float(fo.mean()) * 100, 2), "win": round(float((fo > 0).mean()) * 100, 1), "n": int(len(fo))}
             res["segs"][sg] = val
             if len(V):
                 log(f"    추천 {HZ[Hh][0]}·{sname} 검증: 평균 {val['avg']:+.2f}% · 같은 규모 일반 종목 {val['ew']:+.2f}% · 지수 {val['mkt']:+.2f}% · "
-                    f"수익 마감 {val['win']}% (분할 매도 시 {val.get('win2')}%, 평균 {val.get('avg2')}%) · 1차 목표 도달 {val.get('t1')}% (같은 규모 {val.get('t1base')}%) · 목표 {val['hitT']}% · 손절 {val['hitS']}% · {val['n']:,}건")
+                    f"[신호등 꺼진 날 {val.get('off', {}).get('avg')}% / {val.get('off', {}).get('win')}%] 수익 마감 {val['win']}% (분할 매도 시 {val.get('win2')}%, 평균 {val.get('avg2')}%) · 1차 목표 도달 {val.get('t1')}% (같은 규모 {val.get('t1base')}%) · 목표 {val['hitT']}% · 손절 {val['hitS']}% · {val['n']:,}건")
             cand = [(ci_, float(p)) for ci_, p in op_today.items()
                     if p >= MIN_OP and amt60[t_last, ci_] >= MIN_AMT and np.isfinite(A[3][t_last, ci_])
                     and (big[t_last, ci_] if sg == "L" else not big[t_last, ci_])
-                    and (flt is None or np.nan_to_num(flt[t_last, ci_]) > 0)]
+                    and (flt is None or np.nan_to_num(flt[t_last, ci_]) > 0)
+                    and (not vq or kv[t_last, ci_] < vq)]
             cand.sort(key=lambda x: -x[1])
             cnt, sel = {}, []
             for ci_, p in cand:
