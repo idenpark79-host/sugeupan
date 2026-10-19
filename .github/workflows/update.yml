@@ -26,6 +26,12 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-site.txt
       - run: pip install -r requirements-site.txt
+      - name: 지난 실행의 시세·수급 캐시 복원 (새로 생긴 날짜만 받도록)
+        uses: actions/cache@v4
+        with:
+          path: cache
+          key: wake-cache-${{ github.run_id }}
+          restore-keys: wake-cache-
       - name: 데이터 생성
         env:
           KRX_ID: ${{ secrets.KRX_ID }}

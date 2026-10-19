@@ -15,6 +15,23 @@ import data
 CACHE = Path(__file__).resolve().parent / "cache"
 
 
+def fresh_day() -> pd.Timestamp:
+    """캐시가 최신인지 판단할 기준일: 오늘(한국시간 16시 이후) 또는 직전 평일."""
+    now = pd.Timestamp.now(tz="Asia/Seoul").tz_localize(None)
+    d = now.normalize() if now.hour >= 16 else now.normalize() - pd.Timedelta(days=1)
+    while d.weekday() >= 5:
+        d -= pd.Timedelta(days=1)
+    return d
+
+
+def _read_cache(f: Path):
+    try:
+        df = pd.read_csv(f, index_col=0, parse_dates=True)
+        return df if len(df) else None
+    except Exception:
+        return None
+
+
 def _pick(df: pd.DataFrame, *names):
     for n in names:
         if n in df.columns:
@@ -91,13 +108,25 @@ def _fetch_one(code: str, years: int, demo: bool) -> pd.DataFrame:
         return data.demo_series(code, 252 * years)
     CACHE.mkdir(exist_ok=True)
     f = CACHE / f"{code}.csv"
-    if f.exists() and date.fromtimestamp(f.stat().st_mtime) == date.today():
-        return pd.read_csv(f, index_col=0, parse_dates=True)
+    old = _read_cache(f) if f.exists() else None
+    if old is not None and old.index.max() >= fresh_day():
+        return old
     import FinanceDataReader as fdr
-    start = (pd.Timestamp.today() - pd.DateOffset(years=years, days=10)).strftime("%Y-%m-%d")
+    full_start = (pd.Timestamp.today() - pd.DateOffset(years=years, days=10))
     for attempt in range(3):
         try:
-            df = data._normalize(fdr.DataReader(code, start))
+            if old is not None and old.index.min() <= full_start + pd.Timedelta(days=30):
+                # 이어받기: 마지막 저장일 10일 전부터만 받고, 겹치는 날 가격이 다르면(액면분할 등 수정주가) 전체 다시 받기
+                new = data._normalize(fdr.DataReader(code, (old.index.max() - pd.Timedelta(days=10)).strftime("%Y-%m-%d")))
+                ov = old.index.intersection(new.index)
+                if len(ov) and (abs(new.loc[ov, "Close"] / old.loc[ov, "Close"] - 1) > 0.005).any():
+                    df = data._normalize(fdr.DataReader(code, full_start.strftime("%Y-%m-%d")))
+                else:
+                    df = pd.concat([old, new])
+                    df = df[~df.index.duplicated(keep="last")].sort_index()
+                    df = df[df.index >= full_start]
+            else:
+                df = data._normalize(fdr.DataReader(code, full_start.strftime("%Y-%m-%d")))
             df = df[(df["Close"] > 0) & (df["Volume"] > 0)]
             df.to_csv(f)
             return df
@@ -157,12 +186,15 @@ def _fetch_flow_one(code: str, years: int, demo: bool, index=None) -> pd.DataFra
         return _demo_flow(code, index)
     CACHE.mkdir(exist_ok=True)
     f = CACHE / f"flow_{code}.csv"
-    if f.exists() and date.fromtimestamp(f.stat().st_mtime) == date.today():
-        return pd.read_csv(f, index_col=0, parse_dates=True)
+    prev = _read_cache(f) if f.exists() else None
+    if prev is not None and prev.index.max() >= fresh_day():
+        return prev
     from pykrx import stock
     end = pd.Timestamp.today()
     start = end - pd.DateOffset(years=years, days=10)
-    parts, a = [], start
+    if prev is not None and prev.index.min() <= start + pd.Timedelta(days=30):
+        start = prev.index.max() - pd.Timedelta(days=7)            # 이어받기: 최근 며칠만
+    parts, a = ([prev] if prev is not None and start > end - pd.DateOffset(years=years) else []), start
     while a < end:                                        # 긴 기간은 2년 단위로 나눠 조회
         b = min(a + pd.DateOffset(years=2), end)
         for attempt in range(3):
@@ -176,6 +208,7 @@ def _fetch_flow_one(code: str, years: int, demo: bool, index=None) -> pd.DataFra
     if parts:
         df = pd.concat(parts)
         df = df[~df.index.duplicated(keep="last")].sort_index()
+        df = df[df.index >= end - pd.DateOffset(years=years, days=10)]
         df.to_csv(f)
         return df
     raise RuntimeError(f"{code} 매매동향 수집 실패")

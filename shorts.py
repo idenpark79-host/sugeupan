@@ -22,10 +22,14 @@ H = 20
 def _fetch_one(code: str) -> pd.DataFrame:
     CACHE.mkdir(exist_ok=True)
     f = CACHE / f"short_{code}.csv"
-    if f.exists() and date.fromtimestamp(f.stat().st_mtime) == date.today():
-        return pd.read_csv(f, index_col=0, parse_dates=True)
+    from universe import fresh_day, _read_cache
+    prev = _read_cache(f) if f.exists() else None
+    if prev is not None and prev.index.max() >= fresh_day() - pd.Timedelta(days=4):     # 잔고는 2영업일 늦게 공시
+        return prev
     from pykrx.stock import get_shorting_status_by_date
     end, a, parts = pd.Timestamp.today(), START, []
+    if prev is not None and prev.index.min() <= START + pd.Timedelta(days=30):
+        a, parts = prev.index.max() - pd.Timedelta(days=10), [prev]
     while a < end:                                              # 2년 단위로 나눠 조회
         b = min(a + pd.DateOffset(years=2), end)
         for k in range(3):

@@ -797,7 +797,7 @@ function drawNav() {
   $("#tabbar").innerHTML = [["home", "시장"], ["ai", "추천종목"], ["flows", "투자자"], ["watch", "관심"]].map(([r, l]) =>
     `<a href="#${r}" data-r="${r}">${ico(ICON_OF[r])}<span>${l}</span></a>`).join("") + `<button id="moreBtn" aria-label="전체 메뉴">${ico("menu")}<span>전체</span></button>`;
   $("#moreBtn").onclick = openSheet;
-  if (S.meta) $("#railFoot").innerHTML = `${dt(S.meta.asof)} 종가 기준<br>매 영업일 18:40 갱신`;
+  if (S.meta) $("#railFoot").innerHTML = `${dt(S.meta.asof)} 종가 기준<br>장중 약 20분마다 시세 · 매일 저녁 분석 갱신`;
   markNav();
 }
 function markNav() {
@@ -810,7 +810,7 @@ function openSheet() {
   $("#sheetIn").innerHTML = NAV.map(([g, items]) => `<div class="grp">${g}</div><div class="gl">${items.map(([r, l]) =>
     `<a href="#${r}" data-r="${r}">${ico(ICON_OF[r])}${l}</a>`).join("")}</div>`).join("") +
     `<div class="grp">화면</div>${seg("sth", [["auto", "시스템"], ["light", "라이트"], ["dark", "다크"]], th)}
-     <p class="note" style="margin-top:12px">${S.meta ? `${dt(S.meta.asof)} 종가 기준 · 매 영업일 18:40 갱신` : ""}</p>`;
+     <p class="note" style="margin-top:12px">${S.meta ? `${dt(S.meta.asof)} 종가 기준 · 장중 약 20분마다 시세 · 매일 저녁 분석 갱신` : ""}</p>`;
   onSeg($("#sheetIn"), "sth", v => { applyTheme(v); closeSheet(); route(); });
   markNav();
   $("#sheet").hidden = false;
@@ -990,6 +990,26 @@ function page(html) {
   return v;
 }
 
+/* ── 장중 시세(약 20분 간격, 거래소 지연 시세) — GitHub 'live' 브랜치의 quick.json ── */
+const LIVE_URL = "https://raw.githubusercontent.com/idenpark79-host/sugeupan/live/quick.json";
+const liveWindow = () => { const d = new Date(Date.now() + 9 * 3600e3), m = d.getUTCHours() * 60 + d.getUTCMinutes(), w = d.getUTCDay(); return w >= 1 && w <= 5 && m >= 540 && m <= 1020; };
+async function liveLoad() {
+  const r = await fetch(`${LIVE_URL}?t=${Math.floor(Date.now() / 60000)}`, { cache: "no-store" });
+  if (!r.ok) return false;
+  const q = await r.json();
+  if (!q?.p || !q.day || q.day < (S.meta?.asof || "")) return false;            // 사이트 데이터보다 오래된 시세는 무시
+  if (S.liveT === q.t) return false;
+  for (const [c, [p, pc]] of Object.entries(q.p)) { const s = S.by[c]; if (s && p > 0) { s.price = p; s.pct = pc; s.chg = Math.round(p - p / (1 + pc / 100)); } }
+  S.liveT = q.t; S.live = q;
+  const k = new Date(q.t), hm = `${String(k.getHours()).padStart(2, "0")}:${String(k.getMinutes()).padStart(2, "0")}`;
+  $("#asof").textContent = q.close ? `${dt(q.day)} 종가` : `${dt(q.day).slice(5)} ${hm} 시세 (지연)`;
+  return true;
+}
+function liveRefresh() {
+  $$("[data-rt]").forEach(e => { const s = S.by[e.dataset.rt]; if (!s) return;
+    const p = $(".rp", e), c = $(".rc", e); if (p) p.textContent = n(s.price); if (c) { c.textContent = pct(s.pct); c.className = "rc " + cls(s.pct); } });
+}
+
 /* ── 데이터 ── */
 async function boot() {
   try {
@@ -1005,8 +1025,10 @@ async function boot() {
     S.pick5 = S.pickH[5];
     S.sectors = sectorAgg(S.list);
     $("#asof").textContent = `${dt(S.meta.asof)} 종가`;
+    await Promise.race([liveLoad().catch(() => { }), new Promise(r => setTimeout(r, 2500))]);
     drawNav();
     route();
+    setInterval(async () => { if (document.hidden || !liveWindow()) return; if (await liveLoad().catch(() => false)) liveRefresh(); }, 180000);
   } catch (e) {
     console.error(e);
     $("#view").innerHTML = `<div class="card empty">데이터를 불러오지 못했습니다. 잠시 후 다시 접속해 주십시오.</div>`;
