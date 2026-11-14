@@ -824,10 +824,15 @@ def main():
             import setups
             sx = setups.build(ext_prices, dict(zip(lst.Code, lst.Marcap)), dict(zip(lst.Code, lst.Name)),
                               flows=None if (src.demo or src.sample_flow) else scan_flows, ops=(rt or {}).get("ops"), log=log)
+            diag = {"ok": True, "asof": sx["asof"], "regime": sx["regime"], "picks": [[p["code"], p["name"], p["setup"]] for p in sx["picks"]],
+                    "book": {k: [b["ok"], b["edge"], b["count"]] for k, b in sx["book"].items()}}
         except Exception as e:
             import traceback
             traceback.print_exc()
             log("매매 기법 실패", e)
+            diag = {"ok": False, "err": traceback.format_exc()[-3000:]}
+        if not (args.demo or src.sample_flow):
+            (ROOT / "track" / "sx_diag.json").write_text(json.dumps(diag, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
     build_rec(rt, lst, src, {**ext_prices, **scan_prices}, args.demo, sx)
     ai_today = {c: {"20": [o["score"]]} for c, o in ((rt or {}).get("ops") or {}).items()}   # 퀀트 스코어 = 투자의견 점수
 
