@@ -1,0 +1,33 @@
+{
+ "ok": true,
+ "asof": "2026-11-13",
+ "regime": "off",
+ "picks": [],
+ "book": {
+  "dip": [
+   false,
+   0.27,
+   34
+  ],
+  "rsi2": [
+   false,
+   0.2,
+   0
+  ],
+  "pull": [
+   false,
+   0.2,
+   5
+  ],
+  "high52": [
+   false,
+   -0.49,
+   1
+  ],
+  "flow": [
+   false,
+   -0.7,
+   1
+  ]
+ }
+}
