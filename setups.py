@@ -21,7 +21,7 @@ RULES = {
 # 기법: 이름, 설명, 청산 규칙, 순위 키(작을수록 우선이면 음수)
 SETUPS = {
     "dip": {"name": "낙폭과대 반등", "rule": "mr5",
-            "desc": "대형주가 20일선 대비 12% 이상 떨어졌을 때 사서 5일선 회복 시 판다 (이격도 매매)"},
+            "desc": "대형주가 20일선 대비 12% 이상 떨어졌을 때 사서 5일선 회복 시 판다 (이격도 매매). 이격도 85% 이하·외국인 순매수·거래 감소가 겹친 종목을 먼저 고른다"},
     "rsi2": {"name": "과매도 반등", "rule": "mr5",
              "desc": "200일선 위 상승 추세 종목이 2일 RSI 10 아래로 급락했을 때 사서 5일선 회복 시 판다"},
     "pull": {"name": "기준봉 눌림목", "rule": "mr5",
@@ -97,7 +97,10 @@ def _signals(P):
     gate = ((kos > k60) & (kos > k20) & (breadth >= .4) & (kvolp < .85)).values
     risk_off = ((kos < k60) & (kos < k20)).values
     regime = np.where(gate, "on", np.where(risk_off, "off", "mid"))
-    return {"S": S, "ma": ma, "atr": atr, "amt20": amt20, "dis": dis, "rsi2": rsi2, "regime": regime,
+    q = (dis <= .85).astype(int) + (V < vol20).astype(int)
+    if "fr" in P:
+        q = q + (P["fr"] > 0).astype(int)
+    return {"S": S, "q": q, "fr": P.get("fr"), "vol20": vol20, "ma": ma, "atr": atr, "amt20": amt20, "dis": dis, "rsi2": rsi2, "regime": regime,
             "kb_open": kb_open, "hi250p": hi250p}
 
 
@@ -217,6 +220,12 @@ def build(prices: dict, caps: dict, names: dict, flows: dict | None = None, ops:
             why = []
             if key == "dip":
                 why.append(f"20일선 대비 {(X['dis'].iloc[-1, j] - 1) * 100:.1f}% (이격도 {X['dis'].iloc[-1, j] * 100:.0f}%)")
+                if X["dis"].iloc[-1, j] <= .85:
+                    why.append("이격도 85% 이하 — 과거 이 깊이에서 반등 성적이 더 좋았음")
+                if X["fr"] is not None and X["fr"].iloc[-1, j] > 0:
+                    why.append("급락 중에도 오늘 외국인 순매수")
+                if P["V"].iloc[-1, j] < X["vol20"].iloc[-1, j]:
+                    why.append("거래량이 20일 평균보다 줄어 투매가 잦아드는 모습")
             elif key == "rsi2":
                 why.append(f"2일 RSI {X['rsi2'].iloc[-1, j]:.0f} · 200일선 위")
             elif key == "pull":
@@ -230,16 +239,16 @@ def build(prices: dict, caps: dict, names: dict, flows: dict | None = None, ops:
                          "target": round(tgt) if tgt else None, "target_lab": tlab,
                          "target_pct": round((tgt / px - 1) * 100, 1) if tgt else None,
                          "target2": round(t2) if t2 else None, "target2_lab": t2lab,
-                         "why": why, "score": score, "amt": float(amt20[-1, j])})
+                         "why": why, "score": score, "amt": float(amt20[-1, j]), "q": int(X["q"].iloc[-1, j])})
         if key == "dip":
-            cand.sort(key=lambda x: (-(x["score"] or 0), x["stop_pct"]))
+            cand.sort(key=lambda x: (-x["q"], -(x["score"] or 0), -x["amt"]))
         else:
             cand.sort(key=lambda x: (-(x["score"] or 0), -x["amt"]))
         k = 0
         for x in cand:
             if x["code"] in seen:
                 continue
-            seen.add(x["code"]); x.pop("amt")
+            seen.add(x["code"]); x.pop("amt"); x.pop("q")
             today.append(x); k += 1
             if k >= 5:
                 break
