@@ -86,7 +86,7 @@ def _signals(P):
         both = ((P["fr"] > 0) & (P["ins"] > 0)).astype(float).where(P["fr"].notna())
         S["flow"] = liq & (both.rolling(5).sum() >= 4) & (C > ma[20])
     rng = np.random.default_rng(7)
-    S["_base"] = liq & pd.DataFrame(rng.random(C.shape) < 0.01, index=idx, columns=C.columns)
+    S["_base"] = liq & pd.DataFrame(rng.random(C.shape) < 0.10, index=idx, columns=C.columns)   # 비교 기준: 거래 가능한 종목·날의 10% 표본
     # 시장 국면 (시가총액 가중 지수)
     w = np.nan_to_num(cap)
     r = (ret1.fillna(0) * w).sum(axis=1) / (C.notna() * w).sum(axis=1).replace(0, np.nan)
@@ -161,8 +161,9 @@ def build(prices: dict, caps: dict, names: dict, flows: dict | None = None, ops:
         d, c = np.nonzero(m)
         if len(d) < 40:
             continue
-        df = pd.DataFrame({"d": d, "c": c, "a": amt20[d, c]}).sort_values(["d", "a"], ascending=[True, False]).groupby("d").head(20)
-        d, c = df.d.values, df.c.values
+        if key != "_base":                     # 하루 신호가 많으면 거래대금 상위 20개만 (실제 추천 형태). 비교 기준은 표본 그대로
+            df = pd.DataFrame({"d": d, "c": c, "a": amt20[d, c]}).sort_values(["d", "a"], ascending=[True, False]).groupby("d").head(20)
+            d, c = df.d.values, df.c.values
         rules = [SETUPS[key]["rule"]] if key != "_base" else list(RULES)
         for rule in rules:
             r, dy = _exits(P, X, d, c, rule)
