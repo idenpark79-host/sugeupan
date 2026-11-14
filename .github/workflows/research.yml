@@ -22,6 +22,12 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-site.txt
       - run: pip install -r requirements-site.txt
+      - name: 저녁 갱신의 시세·수급 캐시 가져오기
+        uses: actions/cache/restore@v4
+        with:
+          path: cache
+          key: wake-cache-none
+          restore-keys: wake-cache-
       - name: 실데이터 검증
         env:
           KRX_ID: ${{ secrets.KRX_ID }}
