@@ -666,10 +666,10 @@ def sync_rec_views(views: dict, rt: dict | None = None):
     dump("rec.json", rec)
 
 
-def build_rec(rt: dict | None, lst, src, prices: dict, demo: bool):
-    """추천종목(rec.json: 단기·스윙·중장기)과 실제 추천 누적 성적(track.json)."""
+def build_rec(rt: dict | None, lst, src, prices: dict, demo: bool, sx: dict | None = None):
+    """추천종목(rec.json: 매매 기법별 신호)과 실제 추천 누적 성적(track.json)."""
     log("추천·누적 성적")
-    pk = (rt or {}).get("picks")
+    pk = (rt or {}).get("picks") or ({"market": None} if sx else None)
     if not pk:
         dump("rec.json", {"ok": False})
         dump("track.json", {"h": {}})
@@ -677,7 +677,7 @@ def build_rec(rt: dict | None, lst, src, prices: dict, demo: bool):
     names = dict(zip(lst.Code, lst.Name))
     mkt = pk.get("market")
     pk = {k: v for k, v in pk.items() if k not in ("warn", "market")}
-    wn = rt["picks"].get("warn")
+    wn = None
     for h in pk.values():
         for p in h["picks"]:
             p["name"] = names.get(p["code"], p["name"])
@@ -685,7 +685,15 @@ def build_rec(rt: dict | None, lst, src, prices: dict, demo: bool):
     for p in (wn or {}).get("list", []):
         p["name"] = names.get(p["code"], p["name"])
         p["close"] = r2(p["close"])
-    dump("rec.json", {"ok": True, "asof": rt["meta"]["asof"], "h": pk, "warn": wn, "market": mkt})
+    if sx:
+        for p in sx["picks"]:
+            p["name"] = names.get(p["code"], p["name"])
+            op = (rt or {}).get("ops", {}).get(p["code"])
+            if op:
+                p["op"] = {k: op[k] for k in ("lv", "lab", "score", "theme")}
+    asof = (rt or {}).get("meta", {}).get("asof") or (sx or {}).get("asof")
+    # 이전 방식(스윙·중장기 점수 상위)은 하락장에서 무너져 매매 기법 기반 추천(sx)으로 교체 — h는 비워 둠
+    dump("rec.json", {"ok": True, "asof": asof, "h": {}, "sx": sx, "market": mkt})
     day = pd.Timestamp(src.day).strftime("%Y-%m-%d")
     path = (OUT / "_track_demo.csv") if (demo or src.sample_flow) else (ROOT / "track" / "picks.csv")
     tr = track.load(path)
@@ -700,9 +708,18 @@ def build_rec(rt: dict | None, lst, src, prices: dict, demo: bool):
             except Exception:
                 pass
     tr = track.update(tr, {**prices, **extra})
-    for h in pk.values():
-        if not h.get("wait"):                  # 시장 신호등이 꺼진 날은 추천하지 않으므로 기록도 하지 않음
-            tr = track.add_today(tr, day, h["picks"], h=h["H"], n=20)
+    if sx and sx["picks"]:
+        import setups as _sx
+        for hh in sorted({_sx.RULES[sx["book"][p["setup"]]["rule"]][1] for p in sx["picks"]}):
+            L = []
+            for p in sx["picks"]:
+                b = sx["book"][p["setup"]]
+                if _sx.RULES[b["rule"]][1] != hh:
+                    continue
+                s_ = b["stat"]["now"] if b["basis"] == "now" else b["stat"]["all"]
+                L.append({**p, "prob": (s_ or {}).get("win", 0) / 100, "exp": (s_ or {}).get("avg", 0) / 100, "grade": p["setup"],
+                          "target": p["target"] or p["close"] * 1.2})
+            tr = track.add_today(tr, day, L, h=min(hh, 20), n=20)
     if not (demo or src.sample_flow):
         path.parent.mkdir(exist_ok=True)
         tr.to_csv(path, index=False)
@@ -800,7 +817,18 @@ def main():
             log("AI 스캔 실패", e)
     build_patterns(pstats)
     dump("bt.json", {"ok": False})
-    build_rec(rt, lst, src, {**ext_prices, **scan_prices}, args.demo)
+    sx = None
+    if ext_prices:
+        log("매매 기법 검증·오늘 신호")
+        try:
+            import setups
+            sx = setups.build(ext_prices, dict(zip(lst.Code, lst.Marcap)), dict(zip(lst.Code, lst.Name)),
+                              flows=None if (src.demo or src.sample_flow) else scan_flows, ops=(rt or {}).get("ops"), log=log)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            log("매매 기법 실패", e)
+    build_rec(rt, lst, src, {**ext_prices, **scan_prices}, args.demo, sx)
     ai_today = {c: {"20": [o["score"]]} for c, o in ((rt or {}).get("ops") or {}).items()}   # 퀀트 스코어 = 투자의견 점수
 
     detail = lst[lst.Marcap >= SITE["chart_min_marcap"]].sort_values("Marcap", ascending=False).Code.tolist()

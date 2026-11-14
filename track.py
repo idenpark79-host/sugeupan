@@ -106,7 +106,7 @@ def _summary(tr: pd.DataFrame) -> dict:
 
 
 def summary(tr: pd.DataFrame) -> dict:
-    return {"h": {str(h): _summary(tr[tr.h == h]) for h in (5, 20, 60)}}
+    return {"h": {str(h): _summary(tr[tr.h == h]) for h in (5, 10, 20, 60)}}
 
 
 def history(tr: pd.DataFrame, prices: dict, kospi: pd.Series | None = None, days: int = 120) -> dict:
